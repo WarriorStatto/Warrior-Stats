@@ -7,14 +7,20 @@ st.set_page_config(
     layout="wide"
 )
 
+# ------------------------
 # LOAD DATA
+# ------------------------
 
 @st.cache_data
 def load_data():
     df = pd.read_excel("skittles-import.xlsx")
+
     df.columns = df.columns.str.lower()
 
-    df["date"] = pd.to_datetime(df["date"])
+    df["date"] = pd.to_datetime(
+        df["date"],
+        errors="coerce"
+    )
 
     df["gamekey"] = (
         df["season"].astype(str)
@@ -26,9 +32,22 @@ def load_data():
 
 df = load_data()
 
+# ------------------------
 # SIDEBAR
+# ------------------------
 
 st.sidebar.title("🏆 Warriors Stats")
+
+page = st.sidebar.radio(
+    "Navigation",
+    [
+        "Dashboard",
+        "Leaderboard",
+        "Hall of Fame",
+        "Player Profiles",
+        "Opponent Analysis"
+    ]
+)
 
 season_filter = st.sidebar.multiselect(
     "Season",
@@ -54,114 +73,200 @@ filtered = df[
     & (df["alley"].isin(alley_filter))
 ]
 
-# KPI CARDS
+# ------------------------
+# DASHBOARD
+# ------------------------
 
-st.title("🏆 Warriors Statistics Dashboard")
+if page == "Dashboard":
 
-c1, c2, c3, c4 = st.columns(4)
+    st.title("🏆 Warriors Statistics Dashboard")
 
-c1.metric(
-    "Games",
-    filtered["gamekey"].nunique()
-)
+    c1, c2, c3, c4 = st.columns(4)
 
-c2.metric(
-    "Players",
-    filtered["player"].nunique()
-)
-
-c3.metric(
-    "Average Score",
-    round(filtered["score"].mean(), 2)
-)
-
-c4.metric(
-    "Highest Score",
-    int(filtered["score"].max())
-)
-
-st.divider()
-
-# LEADERBOARD
-
-st.subheader("🏅 Leaderboard")
-
-leaderboard = (
-    filtered.groupby("player")
-    .agg(
-        Games=("gamekey", "nunique"),
-        Average=("score", "mean"),
-        Best=("score", "max"),
-        SixtyPlus=("score", lambda x: (x >= 60).sum()),
-        SeventyPlus=("score", lambda x: (x >= 70).sum())
+    c1.metric(
+        "Games",
+        filtered["gamekey"].nunique()
     )
-)
 
-leaderboard["Average"] = leaderboard["Average"].round(2)
+    c2.metric(
+        "Players",
+        filtered["player"].nunique()
+    )
 
-leaderboard = leaderboard.sort_values(
-    "Average",
-    ascending=False
-)
+    c3.metric(
+        "Average Score",
+        round(filtered["score"].mean(), 2)
+    )
 
-st.dataframe(
-    leaderboard,
-    use_container_width=True
-)
+    c4.metric(
+        "Highest Score",
+        int(filtered["score"].max())
+    )
 
-st.divider()
+    st.subheader("Recent Results")
 
+    st.dataframe(
+        filtered.sort_values(
+            "date",
+            ascending=False
+        ).head(20),
+        use_container_width=True
+    )
+
+# ------------------------
+# LEADERBOARD
+# ------------------------
+
+elif page == "Leaderboard":
+
+    st.title("🏅 Leaderboard")
+
+    leaderboard = (
+        filtered.groupby("player")
+        .agg(
+            Games=("gamekey", "nunique"),
+            Average=("score", "mean"),
+            Best=("score", "max"),
+            SixtyPlus=("score",
+                       lambda x: (x >= 60).sum()),
+            SeventyPlus=("score",
+                         lambda x: (x >= 70).sum())
+        )
+        .reset_index()
+    )
+
+    leaderboard["Average"] = (
+        leaderboard["Average"]
+        .round(2)
+    )
+
+    leaderboard = leaderboard.sort_values(
+        "Average",
+        ascending=False
+    )
+
+    leaderboard.index = (
+        leaderboard.index + 1
+    )
+
+    st.dataframe(
+        leaderboard,
+        use_container_width=True
+    )
+
+# ------------------------
 # HALL OF FAME
+# ------------------------
 
-st.subheader("🏆 Hall of Fame")
+elif page == "Hall of Fame":
 
-hall_of_fame = (
-    filtered
-    .sort_values(
+    st.title("🏆 Hall of Fame")
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric(
+        "Highest Score",
+        int(filtered["score"].max())
+    )
+
+    c2.metric(
+        "70+ Scores",
+        len(
+            filtered[
+                filtered["score"] >= 70
+            ]
+        )
+    )
+
+    c3.metric(
+        "60+ Scores",
+        len(
+            filtered[
+                filtered["score"] >= 60
+            ]
+        )
+    )
+
+    hall = filtered.sort_values(
         "score",
         ascending=False
     )
-)
 
-st.dataframe(
-    hall_of_fame[
-        [
-            "score",
-            "player",
-            "date",
-            "opponent",
-            "venue",
-            "alley",
-            "season"
-        ]
-    ],
-    use_container_width=True
-)
-
-st.divider()
-
-# OPPONENT ANALYSIS
-
-st.subheader("⚔️ Opponent Analysis")
-
-opponents = (
-    filtered
-    .groupby("opponent")
-    .agg(
-        Games=("gamekey", "nunique"),
-        Average=("score", "mean"),
-        Best=("score", "max")
+    st.dataframe(
+        hall[
+            [
+                "score",
+                "player",
+                "date",
+                "opponent",
+                "venue",
+                "alley",
+                "season"
+            ]
+        ],
+        use_container_width=True
     )
-)
 
-opponents["Average"] = opponents["Average"].round(2)
+# ------------------------
+# PLAYER PROFILE
+# ------------------------
 
-opponents = opponents.sort_values(
-    "Average",
-    ascending=False
-)
+elif page == "Player Profiles":
 
-st.dataframe(
-    opponents,
-    use_container_width=True
-)
+    st.title("👤 Player Profile")
+
+    player = st.selectbox(
+        "Select Player",
+        sorted(filtered["player"].unique())
+    )
+
+    player_df = filtered[
+        filtered["player"] == player
+    ]
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric(
+        "Games",
+        player_df["gamekey"].nunique()
+    )
+
+    c2.metric(
+        "Average",
+        round(
+            player_df["score"].mean(),
+            2
+        )
+    )
+
+    c3.metric(
+        "Best Score",
+        int(
+            player_df["score"].max()
+        )
+    )
+
+    st.subheader("Match History")
+
+    st.dataframe(
+        player_df.sort_values(
+            "date",
+            ascending=False
+        ),
+        use_container_width=True
+    )
+
+# ------------------------
+# OPPONENT ANALYSIS
+# ------------------------
+
+elif page == "Opponent Analysis":
+
+    st.title("⚔️ Opponent Analysis")
+
+    opponents = (
+        filtered
+        .groupby("opponent")
+        .agg(
+            Games=("gamekey", "nunique"),
+ 
