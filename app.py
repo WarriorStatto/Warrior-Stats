@@ -13,17 +13,33 @@ st.title("🏆 Warriors Statistics Dashboard")
 def load_data():
     df = pd.read_excel("skittles-import.xlsx")
     df.columns = df.columns.str.lower()
+
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
     return df
 
 df = load_data()
 
 st.success(f"{len(df)} records loaded")
 
-st.subheader("Data Preview")
+# KPI CARDS
 
-st.dataframe(df.head(20))
+c1, c2, c3, c4 = st.columns(4)
 
-st.subheader("Top Players")
+c1.metric("Games", df["gamekey"].nunique())
+
+c2.metric("Players", df["player"].nunique())
+
+c3.metric("Average Score", round(df["score"].mean(), 2))
+
+c4.metric("Highest Score", int(df["score"].max()))
+
+st.divider()
+
+# LEADERBOARD
+
+st.subheader("🏅 Player Leaderboard")
 
 leaderboard = (
     df.groupby("player")
@@ -33,9 +49,46 @@ leaderboard = (
           best=("score", "max")
       )
       .reset_index()
-      .sort_values("average", ascending=False)
 )
 
 leaderboard["average"] = leaderboard["average"].round(2)
 
-st.dataframe(leaderboard)
+leaderboard = leaderboard.sort_values(
+    "average",
+    ascending=False
+)
+
+leaderboard.index = leaderboard.index + 1
+
+st.dataframe(
+    leaderboard,
+    use_container_width=True
+)
+
+st.divider()
+
+# HALL OF FAME
+
+st.subheader("🏆 Hall of Fame")
+
+hall_of_fame = (
+    df.sort_values(
+        "score",
+        ascending=False
+    )
+)
+
+st.dataframe(
+    hall_of_fame[
+        [
+            "score",
+            "player",
+            "date",
+            "opponent",
+            "venue",
+            "alley",
+            "season"
+        ]
+    ],
+    use_container_width=True
+)
