@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
-# --------------------------------
-# CONFIG
-# --------------------------------
+# ----------------------------------------------------
+# PAGE CONFIG
+# ----------------------------------------------------
 
 st.set_page_config(
     page_title="Warriors Stats",
@@ -11,9 +12,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# --------------------------------
-# DATA
-# --------------------------------
+# ----------------------------------------------------
+# LOAD DATA
+# ----------------------------------------------------
 
 @st.cache_data
 def load_data():
@@ -21,10 +22,11 @@ def load_data():
 
     df.columns = df.columns.str.lower()
 
-    df["date"] = pd.to_datetime(
-        df["date"],
-        errors="coerce"
-    )
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(
+            df["date"],
+            errors="coerce"
+        )
 
     df["gamekey"] = (
         df["season"].astype(str)
@@ -36,9 +38,9 @@ def load_data():
 
 df = load_data()
 
-# --------------------------------
+# ----------------------------------------------------
 # SIDEBAR
-# --------------------------------
+# ----------------------------------------------------
 
 st.sidebar.title("🏆 Warriors Stats")
 
@@ -52,6 +54,10 @@ page = st.sidebar.radio(
         "Opponent Analysis"
     ]
 )
+
+# ----------------------------------------------------
+# FILTERS
+# ----------------------------------------------------
 
 season_filter = st.sidebar.multiselect(
     "Season",
@@ -71,15 +77,22 @@ alley_filter = st.sidebar.multiselect(
     default=sorted(df["alley"].unique())
 )
 
+opponent_filter = st.sidebar.multiselect(
+    "Opponent",
+    sorted(df["opponent"].unique()),
+    default=sorted(df["opponent"].unique())
+)
+
 filtered = df[
     (df["season"].isin(season_filter))
     & (df["venue"].isin(venue_filter))
     & (df["alley"].isin(alley_filter))
+    & (df["opponent"].isin(opponent_filter))
 ]
 
-# --------------------------------
+# ----------------------------------------------------
 # DASHBOARD
-# --------------------------------
+# ----------------------------------------------------
 
 if page == "Dashboard":
 
@@ -87,14 +100,56 @@ if page == "Dashboard":
 
     c1, c2, c3, c4 = st.columns(4)
 
-    c1.metric("Games", filtered["gamekey"].nunique())
-    c2.metric("Players", filtered["player"].nunique())
-    c3.metric("Average Score", round(filtered["score"].mean(), 2))
-    c4.metric("Highest Score", int(filtered["score"].max()))
+    c1.metric(
+        "Games",
+        filtered["gamekey"].nunique()
+    )
 
-# --------------------------------
+    c2.metric(
+        "Players",
+        filtered["player"].nunique()
+    )
+
+    c3.metric(
+        "Average Score",
+        round(filtered["score"].mean(), 2)
+    )
+
+    c4.metric(
+        "Highest Score",
+        int(filtered["score"].max())
+    )
+
+    st.subheader("Top 10 Players")
+
+    leaderboard = (
+        filtered.groupby("player")
+        .agg(
+            Average=("score", "mean")
+        )
+        .reset_index()
+        .sort_values(
+            "Average",
+            ascending=False
+        )
+        .head(10)
+    )
+
+    chart = px.bar(
+        leaderboard,
+        x="Average",
+        y="player",
+        orientation="h"
+    )
+
+    st.plotly_chart(
+        chart,
+        use_container_width=True
+    )
+
+# ----------------------------------------------------
 # LEADERBOARD
-# --------------------------------
+# ----------------------------------------------------
 
 elif page == "Leaderboard":
 
@@ -106,27 +161,52 @@ elif page == "Leaderboard":
             Games=("gamekey", "nunique"),
             Average=("score", "mean"),
             Best=("score", "max"),
-            SixtyPlus=("score", lambda x: (x >= 60).sum()),
-            SeventyPlus=("score", lambda x: (x >= 70).sum())
+            Scores60=("score",
+                      lambda x: (x >= 60).sum()),
+            Scores70=("score",
+                      lambda x: (x >= 70).sum())
         )
         .reset_index()
     )
 
-    leaderboard["Average"] = leaderboard["Average"].round(2)
+    leaderboard["Average"] = (
+        leaderboard["Average"].round(2)
+    )
 
     leaderboard = leaderboard.sort_values(
         "Average",
         ascending=False
     )
 
+    leaderboard["Rank"] = (
+        leaderboard["Average"]
+        .rank(
+            ascending=False,
+            method="dense"
+        )
+        .astype(int)
+    )
+
+    leaderboard = leaderboard[
+        [
+            "Rank",
+            "player",
+            "Games",
+            "Average",
+            "Best",
+            "Scores60",
+            "Scores70"
+        ]
+    ]
+
     st.dataframe(
         leaderboard,
         use_container_width=True
     )
 
-# --------------------------------
+# ----------------------------------------------------
 # HALL OF FAME
-# --------------------------------
+# ----------------------------------------------------
 
 elif page == "Hall of Fame":
 
@@ -154,9 +234,15 @@ elif page == "Hall of Fame":
         ascending=False
     )
 
+    hall["Rank"] = range(
+        1,
+        len(hall) + 1
+    )
+
     st.dataframe(
         hall[
             [
+                "Rank",
                 "score",
                 "player",
                 "date",
@@ -169,9 +255,9 @@ elif page == "Hall of Fame":
         use_container_width=True
     )
 
-# --------------------------------
-# PLAYER PROFILE
-# --------------------------------
+# ----------------------------------------------------
+# PLAYER PROFILES
+# ----------------------------------------------------
 
 elif page == "Player Profiles":
 
@@ -186,7 +272,7 @@ elif page == "Player Profiles":
         filtered["player"] == player
     ]
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4, c5 = st.columns(5)
 
     c1.metric(
         "Games",
@@ -195,25 +281,65 @@ elif page == "Player Profiles":
 
     c2.metric(
         "Average",
-        round(player_df["score"].mean(), 2)
+        round(
+            player_df["score"].mean(),
+            2
+        )
     )
 
     c3.metric(
         "Best Score",
-        int(player_df["score"].max())
+        int(
+            player_df["score"].max()
+        )
     )
 
-    st.dataframe(
-        player_df.sort_values(
-            "date",
-            ascending=False
-        ),
+    c4.metric(
+        "70+ Scores",
+        len(
+            player_df[
+                player_df["score"] >= 70
+            ]
+        )
+    )
+
+    c5.metric(
+        "60+ Scores",
+        len(
+            player_df[
+                player_df["score"] >= 60
+            ]
+        )
+    )
+
+    st.subheader("Score Trend")
+
+    trend = px.line(
+        player_df.sort_values("date"),
+        x="date",
+        y="score",
+        markers=True
+    )
+
+    st.plotly_chart(
+        trend,
         use_container_width=True
     )
 
-# --------------------------------
+    st.subheader("Top 10 Scores")
+
+    st.dataframe(
+        player_df.sort_values(
+            "score",
+            ascending=False
+        )
+        .head(10),
+        use_container_width=True
+    )
+
+# ----------------------------------------------------
 # OPPONENT ANALYSIS
-# --------------------------------
+# ----------------------------------------------------
 
 elif page == "Opponent Analysis":
 
@@ -229,7 +355,10 @@ elif page == "Opponent Analysis":
         .reset_index()
     )
 
-    opponents["Average"] = opponents["Average"].round(2)
+    opponents["Average"] = (
+        opponents["Average"]
+        .round(2)
+    )
 
     opponents = opponents.sort_values(
         "Average",
@@ -238,5 +367,17 @@ elif page == "Opponent Analysis":
 
     st.dataframe(
         opponents,
+        use_container_width=True
+    )
+
+    chart = px.bar(
+        opponents,
+        x="Average",
+        y="opponent",
+        orientation="h"
+    )
+
+    st.plotly_chart(
+        chart,
         use_container_width=True
     )
