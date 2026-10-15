@@ -7,10 +7,14 @@ st.set_page_config(
     layout="wide"
 )
 
+# LOAD DATA
+
 @st.cache_data
 def load_data():
     df = pd.read_excel("skittles-import.xlsx")
     df.columns = df.columns.str.lower()
+
+    df["date"] = pd.to_datetime(df["date"])
 
     df["gamekey"] = (
         df["season"].astype(str)
@@ -22,30 +26,58 @@ def load_data():
 
 df = load_data()
 
-st.title("🏆 Warriors Statistics Dashboard")
+# SIDEBAR
+
+st.sidebar.title("🏆 Warriors Stats")
+
+season_filter = st.sidebar.multiselect(
+    "Season",
+    sorted(df["season"].unique()),
+    default=sorted(df["season"].unique())
+)
+
+venue_filter = st.sidebar.multiselect(
+    "Venue",
+    sorted(df["venue"].unique()),
+    default=sorted(df["venue"].unique())
+)
+
+alley_filter = st.sidebar.multiselect(
+    "Alley",
+    sorted(df["alley"].unique()),
+    default=sorted(df["alley"].unique())
+)
+
+filtered = df[
+    (df["season"].isin(season_filter))
+    & (df["venue"].isin(venue_filter))
+    & (df["alley"].isin(alley_filter))
+]
 
 # KPI CARDS
+
+st.title("🏆 Warriors Statistics Dashboard")
 
 c1, c2, c3, c4 = st.columns(4)
 
 c1.metric(
     "Games",
-    df["gamekey"].nunique()
+    filtered["gamekey"].nunique()
 )
 
 c2.metric(
     "Players",
-    df["player"].nunique()
+    filtered["player"].nunique()
 )
 
 c3.metric(
     "Average Score",
-    round(df["score"].mean(), 2)
+    round(filtered["score"].mean(), 2)
 )
 
 c4.metric(
     "Highest Score",
-    int(df["score"].max())
+    int(filtered["score"].max())
 )
 
 st.divider()
@@ -55,13 +87,14 @@ st.divider()
 st.subheader("🏅 Leaderboard")
 
 leaderboard = (
-    df.groupby("player")
+    filtered.groupby("player")
     .agg(
         Games=("gamekey", "nunique"),
         Average=("score", "mean"),
-        Best=("score", "max")
+        Best=("score", "max"),
+        SixtyPlus=("score", lambda x: (x >= 60).sum()),
+        SeventyPlus=("score", lambda x: (x >= 70).sum())
     )
-    .reset_index()
 )
 
 leaderboard["Average"] = leaderboard["Average"].round(2)
@@ -82,9 +115,12 @@ st.divider()
 
 st.subheader("🏆 Hall of Fame")
 
-hall_of_fame = df.sort_values(
-    "score",
-    ascending=False
+hall_of_fame = (
+    filtered
+    .sort_values(
+        "score",
+        ascending=False
+    )
 )
 
 st.dataframe(
@@ -95,8 +131,37 @@ st.dataframe(
             "date",
             "opponent",
             "venue",
-            "alley"
+            "alley",
+            "season"
         ]
     ],
+    use_container_width=True
+)
+
+st.divider()
+
+# OPPONENT ANALYSIS
+
+st.subheader("⚔️ Opponent Analysis")
+
+opponents = (
+    filtered
+    .groupby("opponent")
+    .agg(
+        Games=("gamekey", "nunique"),
+        Average=("score", "mean"),
+        Best=("score", "max")
+    )
+)
+
+opponents["Average"] = opponents["Average"].round(2)
+
+opponents = opponents.sort_values(
+    "Average",
+    ascending=False
+)
+
+st.dataframe(
+    opponents,
     use_container_width=True
 )
