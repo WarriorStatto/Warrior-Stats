@@ -204,9 +204,9 @@ if f.empty:
 # TABS
 # ===================================================================
 
-tab_home, tab_players, tab_h2h, tab_alleys, tab_opps, tab_records, tab_extra = st.tabs(
+tab_home, tab_players, tab_h2h, tab_alleys, tab_opps, tab_records, tab_gerald, tab_extra = st.tabs(
     ["📊 Overview", "👤 Players", "🆚 Head to Head", "🎳 Alleys",
-     "⚔️ Opponents", "🏆 Records", "➕ Extras"]
+     "⚔️ Opponents", "🏆 Records", "🏅 Gerald Trophy", "➕ Extras"]
 )
 
 # ------------------------------------------------------- OVERVIEW
@@ -396,14 +396,67 @@ with tab_extra:
                 Spare9=("spare9", "sum"))
            .reset_index()
            .sort_values("Fines", ascending=False))
+
+    # tick average per game
+    x["Tick Avg"] = (x["Ticks"] / x["Games"]).round(2)
+
     x = _fines_with_pound(x)          # show fines as £0.00
-    st.dataframe(x, hide_index=True, use_container_width=True)
+
+    st.dataframe(
+        x[["player", "Games", "Ticks", "Tick Avg", "Spares",
+           "Fines", "Sunshine", "MissedSingle", "Flopper", "Spare9"]],
+        hide_index=True, use_container_width=True)
 
     st.markdown("#### Totals")
-    t1, t2, t3 = st.columns(3)
+    t1, t2, t3, t4 = st.columns(4)
     t1.metric("Ticks", int(f["ticks"].sum()))
-    t2.metric("Spares", int(f["spares"].sum()))
-    t3.metric("Fines", f"£{f['fines'].sum():,.2f}")
+    t2.metric("Tick average", round(f["ticks"].sum() / max(f["gamekey"].nunique(), 1), 2))
+    t3.metric("Spares", int(f["spares"].sum()))
+    t4.metric("Fines", f"£{f['fines'].sum():,.2f}")
+
+
+# -------------------------------------------------------------------
+# THE GERALD TROPHY — most ticks in a single match, per season
+# -------------------------------------------------------------------
+with tab_gerald:
+    st.markdown("### 🏆 The Gerald Trophy")
+    st.caption("Awarded for the most ticks in a single match, each season.")
+
+    seasons_for_trophy = sorted(f["season"].unique(), reverse=True)
+
+    for season in seasons_for_trophy:
+        season_rows = f[f["season"] == season]
+        if season_rows.empty or season_rows["ticks"].max() == 0:
+            st.markdown(f"**{season}** — no ticks recorded")
+            continue
+
+        best = season_rows["ticks"].max()
+        winners = sorted(season_rows[season_rows["ticks"] == best]["player"].unique())
+
+        # the match(es) where it happened
+        detail = (season_rows[season_rows["ticks"] == best]
+                    .drop_duplicates(["game"])
+                    .sort_values("date"))
+
+        st.markdown(f"#### {season}")
+        w1, w2 = st.columns([2, 1])
+        w1.markdown(
+            f"""<div class="w-h2h">
+                  <div class="w-vs">{' & '.join(winners)}</div>
+                  <div class="w-score">{int(best)} ticks</div>
+                  <div class="w-sub">{'recorded across ' + str(len(detail)) + ' match(es)' if len(detail) > 1 else 'in a single match'}</div>
+                </div>""",
+            unsafe_allow_html=True)
+        w2.dataframe(
+            detail[["opponent", "venue", "alley"]].rename(
+                columns={"opponent": "Opponent", "venue": "Venue", "alley": "Alley"}),
+            hide_index=True, use_container_width=True)
+
+    st.markdown("#### All-time best")
+    if not f.empty and f["ticks"].max() > 0:
+        allbest = f["ticks"].max()
+        allholders = sorted(f[f["ticks"] == allbest]["player"].unique())
+        st.markdown(f"**{int(allbest)} ticks** — {' & '.join(allholders)}")
 
 
 # -------------------------------------------------------------------
