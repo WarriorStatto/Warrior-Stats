@@ -86,6 +86,20 @@ DATA_CANDIDATES = [
     "data/skittles-import.xlsx",
 ]
 
+# -------------------------------------------------------------------
+# THE GERALD TROPHY — committee overrides
+# -------------------------------------------------------------------
+# The award is for the most ticks in a single match. Occasionally the
+# committee applies judgement the data can't show, and the award passes
+# to the next eligible player. Add a season here to record that.
+#
+#   "2025-2026": {"awarded_to": "Chris P", "ticks": 9},
+
+TROPHY_OVERRIDES = {
+    "2025-2026": {"awarded_to": "Chris P", "ticks": 9},
+    "2024-2025": {"awarded_to": "Matt", "ticks": 10},
+}
+
 # columns the app needs, and the spellings it will accept for each
 COLUMN_ALIASES = {
     "missed_single": "missedsingle",
@@ -419,8 +433,8 @@ with tab_extra:
 # THE GERALD TROPHY — most ticks in a single match, per season
 # -------------------------------------------------------------------
 with tab_gerald:
-    st.markdown("### 🏆 The Gerald Trophy")
-    st.caption("Awarded for the most ticks in a single match, each season.")
+    st.markdown("### 🏅 The Gerald Trophy")
+    st.caption("Most ticks in a single match, each season.")
 
     seasons_for_trophy = sorted(f["season"].unique(), reverse=True)
 
@@ -430,11 +444,17 @@ with tab_gerald:
             st.markdown(f"**{season}** — no ticks recorded")
             continue
 
+        # the raw best in the data
         best = season_rows["ticks"].max()
         winners = sorted(season_rows[season_rows["ticks"] == best]["player"].unique())
 
-        # the match(es) where it happened
-        detail = (season_rows[season_rows["ticks"] == best]
+        # committee overrides — judgement calls the data can't show
+        override = TROPHY_OVERRIDES.get(season)
+        if override:
+            winners = [override["awarded_to"]]
+            best = override["ticks"]
+        detail = (season_rows[(season_rows["ticks"] == best)
+                              & (season_rows["player"].isin(winners))]
                     .drop_duplicates(["game"])
                     .sort_values("date"))
 
@@ -444,7 +464,7 @@ with tab_gerald:
             f"""<div class="w-h2h">
                   <div class="w-vs">{' & '.join(winners)}</div>
                   <div class="w-score">{int(best)} ticks</div>
-                  <div class="w-sub">{'recorded across ' + str(len(detail)) + ' match(es)' if len(detail) > 1 else 'in a single match'}</div>
+                  <div class="w-sub">{'in a single match' if len(detail) <= 1 else 'in ' + str(len(detail)) + ' matches'}</div>
                 </div>""",
             unsafe_allow_html=True)
         w2.dataframe(
@@ -457,6 +477,8 @@ with tab_gerald:
         allbest = f["ticks"].max()
         allholders = sorted(f[f["ticks"] == allbest]["player"].unique())
         st.markdown(f"**{int(allbest)} ticks** — {' & '.join(allholders)}")
+
+    st.caption("Awarded for the most ticks in a single match.")
 
 
 # -------------------------------------------------------------------
