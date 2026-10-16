@@ -100,6 +100,10 @@ TROPHY_OVERRIDES = {
     "2024-2025": {"awarded_to": "Matt", "ticks": 10},
 }
 
+# Players left out of the Gerald Trophy's all-time line, for the same
+# reason they were discounted from individual seasons.
+TROPHY_EXCLUDE = {"Sally"}
+
 # columns the app needs, and the spellings it will accept for each
 COLUMN_ALIASES = {
     "missed_single": "missedsingle",
@@ -473,9 +477,10 @@ with tab_gerald:
             hide_index=True, use_container_width=True)
 
     st.markdown("#### All-time best")
-    if not f.empty and f["ticks"].max() > 0:
-        allbest = f["ticks"].max()
-        allholders = sorted(f[f["ticks"] == allbest]["player"].unique())
+    eligible = f[~f["player"].isin(TROPHY_EXCLUDE)]
+    if not eligible.empty and eligible["ticks"].max() > 0:
+        allbest = eligible["ticks"].max()
+        allholders = sorted(eligible[eligible["ticks"] == allbest]["player"].unique())
         st.markdown(f"**{int(allbest)} ticks** — {' & '.join(allholders)}")
 
     st.caption("Awarded for the most ticks in a single match.")
