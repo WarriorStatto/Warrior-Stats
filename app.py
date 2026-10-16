@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import pandas as pd
 import numpy as np
 
@@ -62,10 +63,51 @@ st.markdown(CSS, unsafe_allow_html=True)
 # DATA
 # -------------------------------------------------------------------
 
+# Files the app looks for, in order of preference.
+DATA_CANDIDATES = [
+    "skittles-import.csv",
+    "skittles-import.xlsx",
+    "data/skittles-import.csv",
+    "data/skittles-import.xlsx",
+]
+
+
+def _find_data_file():
+    """Return the first existing data file, or None."""
+    for name in DATA_CANDIDATES:
+        if os.path.exists(name):
+            return name
+    return None
+
+
 @st.cache_data
-def load_data():
-    df = pd.read_csv("skittles-import.csv")
-    df.columns = df.columns.str.strip().str.lower()
+def load_data(path):
+    if path.lower().endswith(".xlsx"):
+        df = pd.read_excel(path, sheet_name="All Games")
+    else:
+        df = pd.read_csv(path)
+
+    # normalise headers: lower-case, no spaces / underscores
+    df.columns = (
+        df.columns.str.strip().str.lower()
+                  .str.replace(" ", "_", regex=False)
+    )
+    # accept a few likely spellings so column names never break the app
+    aliases = {
+        "missed_single": "missedsingle",
+        "missed_singles": "missedsingle",
+        "spare_9": "spare9",
+        "spare_9s": "spare9",
+        "team_total": "team_total",
+        "opp_total": "opp_total",
+    }
+    df = df.rename(columns={k: v for k, v in aliases.items() if k in df.columns})
+
+    for col in ["score", "ticks", "spares", "fines", "sunshine",
+                "missedsingle", "flopper", "spare9", "team_total", "opp_total"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["gamekey"] = df["season"].astype(str) + "-" + df["game"].astype(str)
     df["result"] = np.where(df["team_total"] > df["opp_total"], "W",
@@ -73,7 +115,35 @@ def load_data():
     return df
 
 
-df = load_data()
+_path = _find_data_file()
+if _path is None:
+    st.error("### Data file not found")
+    st.markdown(
+        "The app is looking for the games data but can't find it. "
+        "Add **one** of these files to the repo, in the same folder as `app.py`:"
+    )
+    for name in DATA_CANDIDATES:
+        st.markdown(f"- `{name}`")
+    st.markdown(
+        "Check the filename is spelled and capitalised exactly (Streamlit Cloud "
+        "is case-sensitive), and that it sits next to `app.py` rather than in a "
+        "subfolder it doesn't expect."
+    )
+    st.stop()
+
+try:
+    df = load_data(_path)
+except KeyError as e:
+    st.error(f"### Column missing: {e}")
+    st.markdown(
+        "The data file was found but a required column is missing. "
+        "Expected columns: season, game, date, venue, alley, opponent, player, "
+        "score, ticks, spares, fines, sunshine, missedsingle, flopper, spare9, "
+        "team_total, opp_total."
+    )
+    st.stop()
+
+st.caption(f"Loaded {len(df):,} rows from `{_path}`")
 
 # -------------------------------------------------------------------
 # SIDEBAR — filters only (navigation is via tabs)
