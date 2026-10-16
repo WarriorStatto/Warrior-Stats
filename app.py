@@ -58,7 +58,19 @@ st.markdown(f"""
   .w-big   {{ font-size: 1.5rem; font-weight: 700; }}
   .w-vs    {{ font-size: 0.95rem; font-weight: 600; }}
   .w-score {{ font-size: 1.6rem; font-weight: 700; letter-spacing: 1px; }}
+
+  /* ---- tables: keep the scrollbar clear of the digits ---- */
   div[data-testid="stDataFrame"] {{ font-size: 0.82rem; }}
+  div[data-testid="stDataFrame"] > div {{ padding-bottom: 10px; }}
+  /* breathing room inside the table so the last column isn't clipped */
+  div[data-testid="stDataFrame"] [role="gridcell"],
+  div[data-testid="stDataFrame"] [role="columnheader"] {{
+      padding-left: 10px !important;
+      padding-right: 12px !important;
+  }}
+  /* push the horizontal scrollbar away from the data */
+  div[data-testid="stDataFrame"] [data-testid="stElementToolbar"] {{ margin-bottom: 8px; }}
+  .w-table-wrap {{ padding-right: 6px; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -125,6 +137,11 @@ def load_data(path):
     df["result"] = np.where(df["team_total"] > df["opp_total"], "W",
                      np.where(df["team_total"] < df["opp_total"], "L", "D"))
     return df
+
+
+def _fines_with_pound(df):
+    """Format a fines column as £0.00 for display."""
+    return df.assign(Fines=df["Fines"].map(lambda v: f"£{v:,.2f}"))
 
 
 _req_cols = {"season", "game", "date", "venue", "alley", "opponent", "player", "score"}
@@ -379,11 +396,29 @@ with tab_extra:
                 Spare9=("spare9", "sum"))
            .reset_index()
            .sort_values("Fines", ascending=False))
-    x["Fines"] = x["Fines"].round(2)
+    x = _fines_with_pound(x)          # show fines as £0.00
     st.dataframe(x, hide_index=True, use_container_width=True)
 
     st.markdown("#### Totals")
     t1, t2, t3 = st.columns(3)
     t1.metric("Ticks", int(f["ticks"].sum()))
     t2.metric("Spares", int(f["spares"].sum()))
-    t3.metric("Fines", f"£{f['fines'].sum():.2f}")
+    t3.metric("Fines", f"£{f['fines'].sum():,.2f}")
+
+
+# -------------------------------------------------------------------
+# FOOTER — last updated
+# -------------------------------------------------------------------
+
+_last_game = f["date"].max()
+_last_season = f.loc[f["date"] == _last_game, "season"].iloc[0] if pd.notna(_last_game) else ""
+
+st.divider()
+if pd.notna(_last_game):
+    st.caption(
+        f"Last updated: **{_last_game:%d %B %Y}** "
+        f"({_last_season}) · {len(df):,} player-games across "
+        f"{df['season'].nunique()} seasons"
+    )
+else:
+    st.caption(f"Last updated: date unavailable · {len(df):,} player-games")
