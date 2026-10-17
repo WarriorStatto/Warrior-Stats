@@ -420,18 +420,18 @@ with tab_clutch:
     else:
         _legs = _legs[_legs["season"].isin(season_filter)]
 
-        # tight wins, then the final leg only (leg 8)
+        # tight wins, then the final leg only (leg 8), scores of 10 or more
         tight_wins = _legs[(_legs["result"] == "W") & (_legs["margin"].between(1, 10))]
-        final = tight_wins[tight_wins["leg"] == 8].copy()
+        final = tight_wins[(tight_wins["leg"] == 8) & (tight_wins["leg_score"] >= 10)].copy()
 
         if final.empty:
-            st.info("No tight wins with the current filters.")
+            st.info("No final legs of 10 or more in a tight win with the current filters.")
         else:
             matches = final[["season", "game"]].drop_duplicates().shape[0]
 
             c1, c2, c3 = st.columns(3)
             c1.metric("Tight wins", matches)
-            c2.metric("Final legs", len(final))
+            c2.metric("Final legs 10+", len(final))
             c3.metric("Best final leg", int(final["leg_score"].max()))
 
             st.markdown("#### Held their nerve")
