@@ -222,9 +222,9 @@ if f.empty:
 # TABS
 # ===================================================================
 
-tab_home, tab_players, tab_h2h, tab_alleys, tab_opps, tab_records, tab_gerald, tab_extra = st.tabs(
+tab_home, tab_players, tab_h2h, tab_alleys, tab_opps, tab_records, tab_clutch, tab_gerald, tab_extra = st.tabs(
     ["📊 Overview", "👤 Players", "🆚 Head to Head", "🎳 Alleys",
-     "⚔️ Opponents", "🏆 Records", "🏅 Gerald Trophy", "➕ Extras"]
+     "⚔️ Opponents", "🏆 Records", "🔥 Clutch", "🏅 Gerald Trophy", "➕ Extras"]
 )
 
 # ------------------------------------------------------- OVERVIEW
@@ -398,6 +398,71 @@ with tab_records:
             hide_index=True, use_container_width=True)
     else:
         st.info("Add `skittles-legs.csv` to the repo to show leg records.")
+
+# ------------------------------------------------------- CLUTCH
+with tab_clutch:
+    st.markdown("### 🔥 Clutch final legs")
+    st.caption(
+        "Tight wins — decided by 10 pins or fewer — and what each player "
+        "scored in the final leg of the match."
+    )
+
+    _legs = None
+    if os.path.exists("skittles-legs.csv"):
+        _legs = pd.read_csv("skittles-legs.csv")
+        _legs.columns = _legs.columns.astype(str).str.strip().str.lower()
+
+    if _legs is None or "result" not in _legs.columns or "margin" not in _legs.columns:
+        st.info(
+            "Add the updated `skittles-legs.csv` to the repo to show this tab — "
+            "it needs the `margin`, `result` and `leg` columns."
+        )
+    else:
+        _legs = _legs[_legs["season"].isin(season_filter)]
+
+        # tight wins, then the final leg only (leg 8)
+        tight_wins = _legs[(_legs["result"] == "W") & (_legs["margin"].between(1, 10))]
+        final = tight_wins[tight_wins["leg"] == 8].copy()
+
+        if final.empty:
+            st.info("No tight wins with the current filters.")
+        else:
+            matches = final[["season", "game"]].drop_duplicates().shape[0]
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Tight wins", matches)
+            c2.metric("Final legs", len(final))
+            c3.metric("Best final leg", int(final["leg_score"].max()))
+
+            st.markdown("#### Best clutch final legs")
+            for _, r in final.sort_values("leg_score", ascending=False).head(8).iterrows():
+                st.markdown(
+                    f"""<div class="w-card">
+                          <div class="w-big">{int(r['leg_score'])}</div>
+                          <div class="w-name">{r['player']}</div>
+                          <div class="w-sub">{r['season']} · vs {r['opponent']} · {r['venue']} · won by {int(r['margin'])}</div>
+                        </div>""",
+                    unsafe_allow_html=True)
+
+            st.markdown("#### Clutch ranking")
+            st.caption("Every final leg counts — no minimum appearances.")
+            rk = (final.groupby("player")
+                       .agg(FinalLegs=("leg_score", "count"),
+                            Total=("leg_score", "sum"),
+                            Best=("leg_score", "max"),
+                            Ticks=("tick", "sum"))
+                       .reset_index())
+            rk["Average"] = (rk["Total"] / rk["FinalLegs"]).round(2)
+            rk["10+"] = final[final["leg_score"] >= 10].groupby("player").size().reindex(rk["player"]).fillna(0).astype(int).values
+            rk = rk[["player", "FinalLegs", "Average", "Best", "10+", "Ticks", "Total"]]
+            rk = rk.sort_values(["Average", "FinalLegs"], ascending=[False, False])
+            st.dataframe(rk, hide_index=True, use_container_width=True)
+
+            st.markdown("#### Every clutch final leg")
+            st.dataframe(
+                final.sort_values("leg_score", ascending=False)
+                     [["season", "opponent", "venue", "player", "leg_score", "tick", "margin"]],
+                hide_index=True, use_container_width=True)
 
 # ------------------------------------------------------- EXTRAS
 with tab_extra:
