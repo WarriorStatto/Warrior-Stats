@@ -224,7 +224,7 @@ if f.empty:
 
 tab_home, tab_players, tab_h2h, tab_alleys, tab_opps, tab_records, tab_clutch, tab_gerald, tab_extra = st.tabs(
     ["📊 Overview", "👤 Players", "🆚 Head to Head", "🎳 Alleys",
-     "⚔️ Opponents", "🏆 Records", "🔥 Clutch", "🏅 Gerald Trophy", "➕ Extras"]
+     "⚔️ Opponents", "🏆 Records", "🎯 Hold Your Nerve", "🏅 Gerald Trophy", "➕ Extras"]
 )
 
 # ------------------------------------------------------- OVERVIEW
@@ -399,12 +399,12 @@ with tab_records:
     else:
         st.info("Add `skittles-legs.csv` to the repo to show leg records.")
 
-# ------------------------------------------------------- CLUTCH
+# ------------------------------------------------------- NERVE
 with tab_clutch:
-    st.markdown("### 🔥 Clutch final legs")
+    st.markdown("### 🎯 Hold Your Nerve")
     st.caption(
-        "Tight wins — decided by 10 pins or fewer — and what each player "
-        "scored in the final leg of the match."
+        "Tight wins — decided by 10 pins or fewer — and the best scores "
+        "in the final leg of the match."
     )
 
     _legs = None
@@ -444,21 +444,11 @@ with tab_clutch:
                         </div>""",
                     unsafe_allow_html=True)
 
-            st.markdown("#### Clutch ranking")
-            st.caption("Every final leg counts — no minimum appearances.")
-            rk = (final.groupby("player")
-                       .agg(FinalLegs=("leg_score", "count"),
-                            Total=("leg_score", "sum"),
-                            Best=("leg_score", "max"),
-                            Ticks=("tick", "sum"))
-                       .reset_index())
-            rk["Average"] = (rk["Total"] / rk["FinalLegs"]).round(2)
-            rk["10+"] = final[final["leg_score"] >= 10].groupby("player").size().reindex(rk["player"]).fillna(0).astype(int).values
-            rk = rk[["player", "FinalLegs", "Average", "Best", "10+", "Ticks", "Total"]]
-            rk = rk.sort_values(["Average", "FinalLegs"], ascending=[False, False])
-            st.dataframe(rk, hide_index=True, use_container_width=True)
-
-            st.markdown("#### Every clutch final leg")
+            st.markdown("#### Best final legs")
+            st.caption(
+                "Every tight win, and the best individual scores in its "
+                "final leg."
+            )
             st.dataframe(
                 final.sort_values("leg_score", ascending=False)
                      [["season", "opponent", "venue", "player", "leg_score", "tick", "margin"]],
