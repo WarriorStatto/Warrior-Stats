@@ -444,7 +444,7 @@ with tab_clutch:
                         </div>""",
                     unsafe_allow_html=True)
 
-            st.markdown("#### Best final legs")
+            st.markdown("#### Held their nerve")
             st.caption(
                 "Every tight win, and the best individual scores in its "
                 "final leg."
