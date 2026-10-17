@@ -434,8 +434,8 @@ with tab_clutch:
             c2.metric("Final legs", len(final))
             c3.metric("Best final leg", int(final["leg_score"].max()))
 
-            st.markdown("#### Best clutch final legs")
-            for _, r in final.sort_values("leg_score", ascending=False).head(8).iterrows():
+            st.markdown("#### Held their nerve")
+            for _, r in final.sort_values("leg_score", ascending=False).iterrows():
                 st.markdown(
                     f"""<div class="w-card">
                           <div class="w-big">{int(r['leg_score'])}</div>
@@ -443,16 +443,6 @@ with tab_clutch:
                           <div class="w-sub">{r['season']} · vs {r['opponent']} · {r['venue']} · won by {int(r['margin'])}</div>
                         </div>""",
                     unsafe_allow_html=True)
-
-            st.markdown("#### Held their nerve")
-            st.caption(
-                "Every tight win, and the best individual scores in its "
-                "final leg."
-            )
-            st.dataframe(
-                final.sort_values("leg_score", ascending=False)
-                     [["season", "opponent", "venue", "player", "leg_score", "tick", "margin"]],
-                hide_index=True, use_container_width=True)
 
 # ------------------------------------------------------- EXTRAS
 with tab_extra:
