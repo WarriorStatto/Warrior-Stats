@@ -188,15 +188,22 @@ if a_played:
     a5.metric("Our average", round(at_alley["teamtotal"].mean(), 1))
     a6.metric("Opposition average", round(at_alley["opptotal"].mean(), 1))
 
-    # player averages at this ground
+    # player averages at this ground — line-up only
     st.markdown("##### Form at this alley")
-    plyr = df[df["alley"] == alley].groupby("player").agg(
-        Games=("score", "count"),
-        Average=("score", "mean"),
-        Best=("score", "max")).reset_index()
+    if lineup:
+        st.caption("Selected players only.")
+    plyr = (df[(df["alley"] == alley) & (df["player"].isin(focus))]
+              .groupby("player")
+              .agg(Games=("score", "count"),
+                   Average=("score", "mean"),
+                   Best=("score", "max"))
+              .reset_index())
     plyr["Average"] = plyr["Average"].round(2)
-    st.dataframe(plyr.sort_values("Average", ascending=False),
-                 hide_index=True, use_container_width=True)
+    if plyr.empty:
+        st.info("None of the selected players have played at this alley before.")
+    else:
+        st.dataframe(plyr.sort_values("Average", ascending=False),
+                     hide_index=True, use_container_width=True)
 else:
     st.info(f"No games recorded at {alley}.")
 
@@ -254,13 +261,4 @@ for r in rows:
     if r[vkey] != "—" and isinstance(r[vkey], (int, float)) and r[vkey] >= 60:
         notes.append(f"- **{r['Player']}** averages **{r[vkey]}** against {opponent}")
     if r[akey] != "—" and isinstance(r[akey], (int, float)) and r[akey] >= 60:
-        notes.append(f"- **{r['Player']}** averages **{r[akey]}** at {alley}")
-if notes:
-    st.markdown("\n".join(notes[:8]))
-else:
-    st.markdown("_No standout averages (60+) in these records yet._")
-
-st.divider()
-_last = df["date"].max()
-if pd.notna(_last):
-    st.caption(f"Based on {len(df):,} player-games up to **{_last:%d %B %Y}**")
+        notes.append(f"- **{r['Player']}** averages **{r[
