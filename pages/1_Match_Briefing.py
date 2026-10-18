@@ -261,4 +261,13 @@ for r in rows:
     if r[vkey] != "—" and isinstance(r[vkey], (int, float)) and r[vkey] >= 60:
         notes.append(f"- **{r['Player']}** averages **{r[vkey]}** against {opponent}")
     if r[akey] != "—" and isinstance(r[akey], (int, float)) and r[akey] >= 60:
-        notes.append(f"- **{r['Player']}** averages **{r[
+        notes.append(f"- **{r['Player']}** averages **{r[akey]}** at {alley}")
+if notes:
+    st.markdown("\n".join(notes[:8]))
+else:
+    st.markdown("_No standout averages (60+) in these records yet._")
+
+st.divider()
+_last = df["date"].max()
+if pd.notna(_last):
+    st.caption(f"Based on {len(df):,} player-games up to **{_last:%d %B %Y}**")
