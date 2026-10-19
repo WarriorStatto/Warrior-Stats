@@ -261,35 +261,43 @@ st.caption(
     "position. A prompt for the captain, not a settled line-up."
 )
 
-# score each player-position on gain, fall back to raw average
+# Score each player-position on a BLEND of average and sample size, so a
+# solid record over many games outranks a fluke from two or three:
+#
+#     blend = average x (1 - 1/(games + 1))
+#
+# A 100-game average of 61.3 scores 60.7; a 2-game average of 64.5 scores
+# 43.0. Thin samples discount themselves.
 scores = []
 for p in focus:
     sub = df[df["player"] == p]
     if sub.empty:
         continue
-    career = sub["score"].mean()
     for pos in range(1, 9):
         rs = sub[sub["position"] == pos]
         if len(rs) < MIN_GAMES:
             continue
         avg = rs["score"].mean()
+        n = len(rs)
+        blend = avg * (1 - 1 / (n + 1))
         scores.append({
             "player": p, "position": pos,
-            "gain": avg - career, "avg": avg, "n": len(rs),
+            "gain": avg - sub["score"].mean(),
+            "avg": avg, "n": n, "blend": blend,
         })
 
 scores_df = pd.DataFrame(scores)
 if scores_df.empty:
     st.info("Not enough data to suggest an order with this minimum.")
 else:
-    # greedy: each round take the highest gain still available
+    # greedy: each round take the best blend still available
     taken_players, taken_positions, order = set(), set(), []
     for _ in range(8):
         avail = scores_df[~scores_df["player"].isin(taken_players)
                           & ~scores_df["position"].isin(taken_positions)]
         if avail.empty:
             break
-        top = avail.sort_values(["gain", "avg"], ascending=False).iloc[0]
+        top = avail.sort_values(["blend", "avg"], ascending=False).iloc[0]
         order.append(top)
         taken_players.add(top["player"])
         taken_positions.add(int(top["position"]))
