@@ -294,19 +294,51 @@ else:
         taken_players.add(top["player"])
         taken_positions.add(int(top["position"]))
 
-    for r in sorted(order, key=lambda x: x["position"]):
+    # players left over once the recommendations have taken their pick
+    leftovers = [p for p in focus if p not in taken_players]
+    filled_positions = {int(r["position"]) for r in order}
+    empty_positions = [p for p in range(1, 9) if p not in filled_positions]
+
+    # build the full order: recommendations first, then leftovers in the gaps
+    full_order = []
+    for r in order:
+        full_order.append({
+            "position": int(r["position"]),
+            "player": r["player"],
+            "detail": f"{r['avg']:.1f} avg there · {r['gain']:+.1f} vs career · {int(r['n'])} games",
+            "captains": False,
+        })
+
+    leftover_iter = iter(leftovers)
+    for pos in empty_positions:
+        try:
+            p = next(leftover_iter)
+        except StopIteration:
+            break
+        sub = df[df["player"] == p]
+        full_order.append({
+            "position": pos,
+            "player": p,
+            "detail": "captain's choice",
+            "captains": True,
+        })
+
+    for r in sorted(full_order, key=lambda x: x["position"]):
+        cls = "w-card w-best" if r["captains"] else "w-card"
         st.markdown(
-            f"""<div class="w-card">
-                  <div class="w-big">{int(r['position'])}</div>
+            f"""<div class="{cls}">
+                  <div class="w-big">{r['position']}</div>
                   <div class="w-name">{r['player']}</div>
-                  <div class="w-sub">{r['avg']:.1f} avg there · {r['gain']:+.1f} vs career · {int(r['n'])} games</div>
+                  <div class="w-sub">{r['detail']}</div>
                 </div>""",
             unsafe_allow_html=True)
 
-    st.caption(
-        "Unfilled positions mean no available player met the minimum for "
-        "that slot — lower the minimum to fill them."
-    )
+    if any(r["captains"] for r in full_order):
+        st.caption(
+            "Positions marked *captain's choice* have no qualifying record — "
+            "they are filled from the remaining players so the order is "
+            "complete."
+        )
 
 st.divider()
 st.caption(f"Based on {len(df):,} player-games across {df['season'].nunique()} seasons.")
