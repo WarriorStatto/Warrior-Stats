@@ -503,21 +503,21 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
     # --- row 1: group labels spanning their columns -------------------
     pdf.set_fill_color(*GREEN_FILL)
     pdf.set_text_color(*INK_RGB)
-    pdf.set_font("Helvetica", "B", 9.5)
+    pdf.set_font("Helvetica", "B", 12)
     pdf.set_xy(L, y)
-    pdf.cell(widths[0] + widths[1] + widths[2], 6.4, "", border=0, fill=True, ln=0)
-    pdf.cell(sum(widths[3:6]), 6.4, _txt(f"vs {opponent}"), border=0, align="C", fill=True, ln=0)
-    pdf.cell(sum(widths[6:9]), 6.4, _txt(f"at {alley}"), border=0, align="C", fill=True, ln=0)
-    y += 6.4
+    pdf.cell(widths[0] + widths[1] + widths[2], 8.6, "", border=0, fill=True, ln=0)
+    pdf.cell(sum(widths[3:6]), 8.6, _txt(f"vs {opponent}"), border=0, align="C", fill=True, ln=0)
+    pdf.cell(sum(widths[6:9]), 8.6, _txt(f"at {alley}"), border=0, align="C", fill=True, ln=0)
+    y += 8.6
 
     # --- row 2: the column headings -----------------------------------
     pdf.set_xy(L, y)
-    pdf.set_font("Helvetica", "B", 9.5)
-    heads = ["#", "Player", "Current Season Av", "G", "Avg", "Best", "G", "Avg", "Best"]
+    pdf.set_font("Helvetica", "B", 12)
+    heads = ["#", "Player", "Season Average", "G", "Avg", "Best", "G", "Avg", "Best"]
     for j, (w, htxt) in enumerate(zip(widths, heads)):
         al = "L" if j == 1 else "C"
-        pdf.cell(w, 6.4, _txt(htxt), border=0, align=al, fill=True, ln=0)
-    y += 6.8
+        pdf.cell(w, 8.6, _txt(htxt), border=0, align=al, fill=True, ln=0)
+    y += 9.4
 
     order = _bowling_order([r["Player"] for r in rows], pos_df)
     ordered = sorted(rows, key=lambda r: order.get(r["Player"], (99, True))[0])
@@ -527,7 +527,7 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
         if i % 2 == 0:
             pdf.set_fill_color(*CREAM_RGB)
             pdf.set_xy(L, y)
-            pdf.cell(sum(widths), 7.2, "", border=0, fill=True, ln=0)
+            pdf.cell(sum(widths), 13.2, "", border=0, fill=True, ln=0)
         vals = [
             f"{pos_no}*" if captains else str(pos_no),
             r["Player"],
@@ -539,13 +539,13 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
         pdf.set_text_color(*INK_RGB)
         for j, (w, v) in enumerate(zip(widths, vals)):
             if j == 1:
-                pdf.set_font("Helvetica", "B", 10)
+                pdf.set_font("Helvetica", "B", 13)
                 al = "L"
             else:
-                pdf.set_font("Helvetica", "", 10)
+                pdf.set_font("Helvetica", "", 13)
                 al = "C"
-            pdf.cell(w, 7.2, _txt(v), border=0, align=al, ln=0)
-        y += 7.2
+            pdf.cell(w, 13.2, _txt(v), border=0, align=al, ln=0)
+        y += 13.2
 
     # ---- footer ------------------------------------------------------
     pdf.set_xy(L, pdf.h - 12)
