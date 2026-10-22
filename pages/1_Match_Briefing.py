@@ -289,8 +289,20 @@ LOSS_RGB   = (180, 35, 24)
 
 
 def _txt(v):
-    """Latin-1-safe text for the core fonts (fpdf2's built-in Helvetica)."""
-    return str(v).encode("latin-1", "replace").decode("latin-1")
+    """Plain-ASCII text for the built-in core fonts.
+
+    fpdf2's core fonts render anything outside ASCII as a question mark, so
+    en-dashes, curly quotes and ellipses are folded to their ASCII
+    equivalents before they reach the page.
+    """
+    s = str(v)
+    for bad, good in (
+        ("\u2013", "-"), ("\u2014", "-"), ("\u2012", "-"),   # dashes
+        ("\u2018", "'"), ("\u2019", "'"), ("\u201c", '"'), ("\u201d", '"'),
+        ("\u2026", "..."), ("\u00b7", "-"), ("\u00a0", " "),
+    ):
+        s = s.replace(bad, good)
+    return s.encode("ascii", "replace").decode("ascii")
 
 
 def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated):
@@ -376,78 +388,77 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated):
             y += 5.4
         y += 3
 
-    # ---- the line-up table -------------------------------------------
+    # ---- the line-up, in bowling order -------------------------------
     pdf.set_xy(L, y)
-    pdf.set_font("Helvetica", "B", 9.5)
+    pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(*INK_RGB)
-    pdf.cell(W, 5, _txt("The line-up"), ln=1)
-    y += 6
+    pdf.cell(W, 6, _txt("The line-up (bowling order)"), ln=1)
+    y += 8
 
-    head = ["Player", f"vs {opponent}: G", "Avg", "Best", "W-L",
-            f"at {alley}: G", "Avg", "Best", "W-L"]
-    widths = [30, 17, 14, 13, 14, 17, 14, 13, 14]
+    head = ["#", "Player", f"vs {opponent}", "", "", f"at {alley}", "", ""]
+    sub  = ["", "", "G", "Avg", "Best", "G", "Avg", "Best"]
+    widths = [10, 38, 16, 18, 18, 16, 18, 18]
     scale = W / sum(widths)
     widths = [w * scale for w in widths]
 
+    # two-row header: the fixture names span three columns each
     pdf.set_fill_color(*GREEN_RGB)
     pdf.set_text_color(*INK_RGB)
-    pdf.set_font("Helvetica", "B", 7.6)
+    pdf.set_font("Helvetica", "B", 9.5)
     pdf.set_xy(L, y)
+    pdf.cell(widths[0], 6, "", border=0, fill=True, ln=0)
+    pdf.cell(widths[1], 6, _txt("Player"), border=0, align="L", fill=True, ln=0)
+    pdf.cell(widths[2] + widths[3] + widths[4], 6, _txt(f"vs {opponent}"), border=0, align="C", fill=True, ln=0)
+    pdf.cell(widths[5] + widths[6] + widths[7], 6, _txt(f"at {alley}"), border=0, align="C", fill=True, ln=0)
+    y += 6
+    pdf.set_xy(L, y)
+    pdf.set_font("Helvetica", "B", 9)
     for w, htxt in zip(widths, head):
-        pdf.cell(w, 6, _txt(htxt), border=0, align="C", fill=True, ln=0)
-    y += 6.4
+        pdf.cell(w, 5.6, _txt(htxt), border=0, align="C", fill=True, ln=0)
+    y += 5.8
+    pdf.set_xy(L, y)
+    pdf.set_font("Helvetica", "", 8.6)
+    pdf.set_text_color(*GREY_RGB)
+    for j, (w, htxt) in enumerate(zip(widths, sub)):
+        pdf.cell(w, 5, _txt(htxt), border=0, align=("L" if j == 1 else "C"), ln=0)
+    y += 5.4
 
-    pdf.set_font("Helvetica", "", 7.8)
+    pdf.set_font("Helvetica", "", 10)
     for i, r in enumerate(rows):
         if i % 2 == 0:
             pdf.set_fill_color(*CREAM_RGB)
             pdf.set_xy(L, y)
-            pdf.cell(sum(widths), 5.4, "", border=0, fill=True, ln=0)
+            pdf.cell(sum(widths), 7, "", border=0, fill=True, ln=0)
         vals = [
+            str(r["_position"]),
             r["Player"],
             r[f"vs {opponent} — games"], r[f"vs {opponent} — avg"],
-            r[f"vs {opponent} — best"], r[f"vs {opponent} — W–L"],
+            r[f"vs {opponent} — best"],
             r[f"at {alley} — games"], r[f"at {alley} — avg"],
-            r[f"at {alley} — best"], r[f"at {alley} — W–L"],
+            r[f"at {alley} — best"],
         ]
         pdf.set_xy(L, y)
         pdf.set_text_color(*INK_RGB)
         for j, (w, v) in enumerate(zip(widths, vals)):
-            al = "L" if j == 0 else "C"
-            if j == 0:
-                pdf.set_font("Helvetica", "B", 7.8)
+            if j == 1:
+                pdf.set_font("Helvetica", "B", 10)
+                al = "L"
             else:
-                pdf.set_font("Helvetica", "", 7.8)
-            pdf.cell(w, 5.4, _txt(v), border=0, align=al, ln=0)
-        y += 5.4
-
-    # ---- suggested batting order ------------------------------------
-    y += 6
-    order = suggested_order(rows, opponent, alley)
-    if order:
-        pdf.set_xy(L, y)
-        pdf.set_font("Helvetica", "B", 9.5)
-        pdf.set_text_color(*INK_RGB)
-        pdf.cell(W, 5, _txt("Suggested batting order"), ln=1)
-        y += 6.5
-
-        for i in range(0, len(order), 4):
-            chunk = order[i:i + 4]
-            pdf.set_xy(L, y)
-            for pos, name, note in chunk:
-                pdf.set_fill_color(*SALMON_RGB if note == "captain's choice" else CREAM_RGB)
-                pdf.set_font("Helvetica", "B", 8)
-                pdf.set_text_color(*INK_RGB)
-                pdf.cell(9, 6, _txt(str(pos)), border=0, align="C", fill=True, ln=0)
-                pdf.set_font("Helvetica", "", 8)
-                pdf.cell(W / 4 - 9, 6, _txt(f" {name}"), border=0, fill=True, ln=0)
-            y += 6.8
+                pdf.set_font("Helvetica", "", 10)
+                al = "C"
+            pdf.cell(w, 7, _txt(v), border=0, align=al, ln=0)
+        y += 7
 
     # ---- footer ------------------------------------------------------
-    pdf.set_xy(L, pdf.h - 14)
-    pdf.set_font("Helvetica", "", 7.4)
+    pdf.set_xy(L, pdf.h - 12)
+    pdf.set_font("Helvetica", "", 8.5)
     pdf.set_text_color(*GREY_RGB)
-    pdf.cell(W, 4, _txt("Warriors Skittles — Match Briefing"), align="L", ln=0)
+    pdf.cell(W, 4, _txt("Warriors Skittles - Match Briefing"), align="L", ln=0)
+    if any(r.get("_captains") for r in rows):
+        pdf.set_xy(L, pdf.h - 8)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.cell(W, 4, _txt("Positions marked * are captain's choice (no qualifying record)."),
+                 align="L", ln=0)
 
     return bytes(pdf.output())
 
