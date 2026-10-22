@@ -130,12 +130,12 @@ def load_positions(path):
 _pos_path = next((p for p in POSITION_CANDIDATES if os.path.exists(p)), None)
 pos_df = load_positions(_pos_path) if _pos_path else None
 
+df = load_data(_path)
+
 # the latest season in the data — that's the one whose average the briefing shows
 CURRENT_SEASON = sorted(
-    df.dropna(subset=["season"])["season"].unique()
+    df.dropna(subset=["season"])["season"].astype(str).unique()
 )[-1]
-
-df = load_data(_path)
 
 # one row per game, for team-level records
 games = df.drop_duplicates(["season", "game"]).copy()
