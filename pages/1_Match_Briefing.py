@@ -305,7 +305,53 @@ def _txt(v):
     return s.encode("ascii", "replace").decode("ascii")
 
 
-def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated):
+def _bowling_order(focus, pos_df):
+    """Return {player: (position, captains_choice)} for the given line-up.
+
+    Same blend as the Positions page — average x (1 - 1/(games+1)) — so a long
+    solid record outranks a two-game fluke. Players with no qualifying record
+    fall to the end and are flagged as the captain's choice.
+    """
+    if pos_df is None or pos_df.empty:
+        return {p: (i + 1, True) for i, p in enumerate(focus[:8])}
+
+    scored = []
+    for p in focus:
+        sub = pos_df[pos_df["player"] == p]
+        if sub.empty:
+            continue
+        best = None
+        for pos in range(1, 9):
+            rs = sub[sub["position"] == pos]
+            if rs.empty:
+                continue
+            n = len(rs)
+            blend = rs["score"].mean() * (1 - 1 / (n + 1))
+            if best is None or blend > best[1]:
+                best = (pos, blend)
+        if best:
+            scored.append((p, best[0], best[1]))
+
+    scored.sort(key=lambda t: -t[2])
+    out, used_positions = {}, set()
+    for p, pos, _ in scored[:8]:
+        while pos in used_positions and pos < 8:
+            pos += 1
+        if pos in used_positions:
+            continue
+        used_positions.add(pos)
+        out[p] = (pos, False)
+
+    # anyone left over fills the gaps, marked as the captain's choice
+    leftovers = [p for p in focus if p not in out]
+    gaps = [i for i in range(1, 9) if i not in used_positions]
+    for pos, p in zip(gaps, leftovers):
+        out[p] = (pos, True)
+    return out
+
+
+def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
+                       pos_df=None):
     """One-page A4 briefing. Everything is measured in mm from the top-left."""
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=False)
@@ -423,14 +469,18 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated):
         pdf.cell(w, 5, _txt(htxt), border=0, align=("L" if j == 1 else "C"), ln=0)
     y += 5.4
 
+    order = _bowling_order([r["Player"] for r in rows], pos_df)
+    ordered = sorted(rows, key=lambda r: order.get(r["Player"], (99, True))[0])
+
     pdf.set_font("Helvetica", "", 10)
-    for i, r in enumerate(rows):
+    for i, r in enumerate(ordered):
+        pos_no, captains = order.get(r["Player"], (i + 1, True))
         if i % 2 == 0:
             pdf.set_fill_color(*CREAM_RGB)
             pdf.set_xy(L, y)
             pdf.cell(sum(widths), 7, "", border=0, fill=True, ln=0)
         vals = [
-            str(r["_position"]),
+            f"{pos_no}*" if captains else str(pos_no),
             r["Player"],
             r[f"vs {opponent} — games"], r[f"vs {opponent} — avg"],
             r[f"vs {opponent} — best"],
