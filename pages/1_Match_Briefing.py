@@ -103,6 +103,33 @@ if _path is None:
     )
     st.stop()
 
+
+# ---- positions, for the bowling order --------------------------------
+# This is the same file the Positions page reads, so the order printed on
+# the briefing matches the suggested order shown there exactly.
+
+POSITION_CANDIDATES = [
+    "../skittles-positions.csv",
+    "skittles-positions.csv",
+    "data/skittles-positions.csv",
+]
+
+
+@st.cache_data
+def load_positions(path):
+    p = pd.read_csv(path)
+    p.columns = (p.columns.astype(str).str.strip().str.lower()
+                  .str.replace(" ", "", regex=False))
+    for c in ["score", "position"]:
+        if c in p.columns:
+            p[c] = pd.to_numeric(p[c], errors="coerce")
+    p = p[p["position"].between(1, 8)]
+    return p
+
+
+_pos_path = next((p for p in POSITION_CANDIDATES if os.path.exists(p)), None)
+pos_df = load_positions(_pos_path) if _pos_path else None
+
 df = load_data(_path)
 
 # one row per game, for team-level records
