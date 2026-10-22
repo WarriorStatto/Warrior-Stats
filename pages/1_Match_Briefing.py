@@ -554,32 +554,11 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
     return bytes(pdf.output())
 
 
-def suggested_order(rows, opponent, alley):
-    """Order by blended record (average discounted by sample size)."""
-    scored = []
-    for r in rows:
-        for pos_idx, key in ((0, f"vs {opponent} — avg"), (1, f"at {alley} — avg")):
-            avg = r[key]
-            gkey = f"vs {opponent} — games" if pos_idx == 0 else f"at {alley} — games"
-            g = r[gkey]
-            if isinstance(avg, (int, float)) and isinstance(g, int) and g > 0:
-                scored.append((r["Player"], avg * (1 - 1 / (g + 1)), g))
-                break
-    scored.sort(key=lambda t: -t[1])
-    order = [(i + 1, name, "record") for i, (name, _, _) in enumerate(scored[:8])]
-    placed = {n for _, n, _ in order}
-    remaining = [r["Player"] for r in rows if r["Player"] not in placed]
-    for name in remaining:
-        if len(order) >= 8:
-            break
-        order.append((len(order) + 1, name, "captain's choice"))
-    return order
-
-
 st.divider()
 pdf_bytes = build_briefing_pdf(
     opponent, alley, focus, h2h, at_alley, rows,
     generated=f"Generated {_dt.date.today():%d %B %Y}",
+    pos_df=pos_df,
 )
 st.download_button(
     "🖨️ Download printable briefing (A4 PDF)",
