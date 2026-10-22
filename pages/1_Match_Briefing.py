@@ -305,48 +305,62 @@ def _txt(v):
     return s.encode("ascii", "replace").decode("ascii")
 
 
-def _bowling_order(focus, pos_df):
-    """Return {player: (position, captains_choice)} for the given line-up.
+def _bowling_order(focus, pos_df, min_games=3):
+    """Return {player: (position, captains_choice)} — the SAME order the
+    Positions page produces, from the same data and the same rule.
 
-    Same blend as the Positions page — average x (1 - 1/(games+1)) — so a long
-    solid record outranks a two-game fluke. Players with no qualifying record
-    fall to the end and are flagged as the captain's choice.
+    Score every player-position pair on a blend of average and sample size
+    (blend = average x (1 - 1/(games+1))), then pick greedily: each round take
+    the highest blend whose player and position are both still free. Positions
+    left over are filled from the remaining players and flagged as the
+    captain's choice.
+
+    Nothing here looks at the opposition or the alley — the order is a
+    property of the players, not of the fixture.
     """
     if pos_df is None or pos_df.empty:
         return {p: (i + 1, True) for i, p in enumerate(focus[:8])}
 
-    scored = []
+    # every player-position blend, exactly as the Positions page builds it
+    scores = []
     for p in focus:
         sub = pos_df[pos_df["player"] == p]
         if sub.empty:
             continue
-        best = None
         for pos in range(1, 9):
             rs = sub[sub["position"] == pos]
-            if rs.empty:
+            if len(rs) < min_games:
                 continue
             n = len(rs)
-            blend = rs["score"].mean() * (1 - 1 / (n + 1))
-            if best is None or blend > best[1]:
-                best = (pos, blend)
-        if best:
-            scored.append((p, best[0], best[1]))
+            avg = rs["score"].mean()
+            scores.append({"player": p, "position": pos, "avg": avg, "n": n,
+                           "blend": avg * (1 - 1 / (n + 1))})
 
-    scored.sort(key=lambda t: -t[2])
-    out, used_positions = {}, set()
-    for p, pos, _ in scored[:8]:
-        while pos in used_positions and pos < 8:
-            pos += 1
-        if pos in used_positions:
-            continue
-        used_positions.add(pos)
-        out[p] = (pos, False)
+    if not scores:
+        return {p: (i + 1, True) for i, p in enumerate(focus[:8])}
 
-    # anyone left over fills the gaps, marked as the captain's choice
-    leftovers = [p for p in focus if p not in out]
-    gaps = [i for i in range(1, 9) if i not in used_positions]
+    scores_df = pd.DataFrame(scores)
+
+    # greedy: each round take the best blend still available
+    taken_players, taken_positions, order = set(), set(), []
+    for _ in range(8):
+        avail = scores_df[~scores_df["player"].isin(taken_players)
+                          & ~scores_df["position"].isin(taken_positions)]
+        if avail.empty:
+            break
+        top = avail.sort_values(["blend", "avg"], ascending=False).iloc[0]
+        order.append(top)
+        taken_players.add(top["player"])
+        taken_positions.add(int(top["position"]))
+
+    out = {r["player"]: (int(r["position"]), False) for r in order}
+
+    # leftovers fill the empty slots
+    leftovers = [p for p in focus if p not in taken_players]
+    gaps = [i for i in range(1, 9) if i not in taken_positions]
     for pos, p in zip(gaps, leftovers):
         out[p] = (pos, True)
+
     return out
 
 
