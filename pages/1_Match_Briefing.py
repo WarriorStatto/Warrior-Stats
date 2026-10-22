@@ -130,6 +130,11 @@ def load_positions(path):
 _pos_path = next((p for p in POSITION_CANDIDATES if os.path.exists(p)), None)
 pos_df = load_positions(_pos_path) if _pos_path else None
 
+# the latest season in the data — that's the one whose average the briefing shows
+CURRENT_SEASON = sorted(
+    df.dropna(subset=["season"])["season"].unique()
+)[-1]
+
 df = load_data(_path)
 
 # one row per game, for team-level records
@@ -272,8 +277,13 @@ for p in focus:
     v_games, v_avg, v_best, v_record = stats(vs_them)
     a_games, a_avg, a_best, a_record = stats(at_ground)
 
+    # current-season average for this player (blank if they haven't played yet)
+    _cs = df[(df["player"] == p) & (df["season"] == CURRENT_SEASON)]
+    season_avg = round(_cs["score"].mean(), 1) if len(_cs) else "-"
+
     rows.append({
         "Player": p,
+        "_season_avg": season_avg,
         f"vs {opponent} — games": v_games,
         f"vs {opponent} — avg": v_avg,
         f"vs {opponent} — best": v_best,
@@ -482,51 +492,48 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
     pdf.cell(W, 6, _txt("The line-up (bowling order)"), ln=1)
     y += 8
 
-    head = ["#", "Player", f"vs {opponent}", "", "", f"at {alley}", "", ""]
-    sub  = ["", "", "G", "Avg", "Best", "G", "Avg", "Best"]
-    widths = [10, 38, 16, 18, 18, 16, 18, 18]
+    # Columns: #  |  Player  |  Current Season Av  |  vs <team> G/Avg/Best  |  at <alley> G/Avg/Best
+    widths = [9, 34, 21, 15, 17, 17, 15, 17, 17]
     scale = W / sum(widths)
     widths = [w * scale for w in widths]
 
-    # two-row header: the fixture names span three columns each
-    pdf.set_fill_color(*GREEN_RGB)
+    GREEN_FILL = (197, 224, 180)
+    SUB_GREY   = (110, 110, 110)
+
+    # --- row 1: group labels spanning their columns -------------------
+    pdf.set_fill_color(*GREEN_FILL)
     pdf.set_text_color(*INK_RGB)
     pdf.set_font("Helvetica", "B", 9.5)
     pdf.set_xy(L, y)
-    pdf.cell(widths[0], 6, "", border=0, fill=True, ln=0)
-    pdf.cell(widths[1], 6, _txt("Player"), border=0, align="L", fill=True, ln=0)
-    pdf.cell(widths[2] + widths[3] + widths[4], 6, _txt(f"vs {opponent}"), border=0, align="C", fill=True, ln=0)
-    pdf.cell(widths[5] + widths[6] + widths[7], 6, _txt(f"at {alley}"), border=0, align="C", fill=True, ln=0)
-    y += 6
+    pdf.cell(widths[0] + widths[1] + widths[2], 6.4, "", border=0, fill=True, ln=0)
+    pdf.cell(sum(widths[3:6]), 6.4, _txt(f"vs {opponent}"), border=0, align="C", fill=True, ln=0)
+    pdf.cell(sum(widths[6:9]), 6.4, _txt(f"at {alley}"), border=0, align="C", fill=True, ln=0)
+    y += 6.4
+
+    # --- row 2: the column headings -----------------------------------
     pdf.set_xy(L, y)
-    pdf.set_font("Helvetica", "B", 9)
-    for w, htxt in zip(widths, head):
-        pdf.cell(w, 5.6, _txt(htxt), border=0, align="C", fill=True, ln=0)
-    y += 5.8
-    pdf.set_xy(L, y)
-    pdf.set_font("Helvetica", "", 8.6)
-    pdf.set_text_color(*GREY_RGB)
-    for j, (w, htxt) in enumerate(zip(widths, sub)):
-        pdf.cell(w, 5, _txt(htxt), border=0, align=("L" if j == 1 else "C"), ln=0)
-    y += 5.4
+    pdf.set_font("Helvetica", "B", 9.5)
+    heads = ["#", "Player", "Current Season Av", "G", "Avg", "Best", "G", "Avg", "Best"]
+    for j, (w, htxt) in enumerate(zip(widths, heads)):
+        al = "L" if j == 1 else "C"
+        pdf.cell(w, 6.4, _txt(htxt), border=0, align=al, fill=True, ln=0)
+    y += 6.8
 
     order = _bowling_order([r["Player"] for r in rows], pos_df)
     ordered = sorted(rows, key=lambda r: order.get(r["Player"], (99, True))[0])
 
-    pdf.set_font("Helvetica", "", 10)
     for i, r in enumerate(ordered):
         pos_no, captains = order.get(r["Player"], (i + 1, True))
         if i % 2 == 0:
             pdf.set_fill_color(*CREAM_RGB)
             pdf.set_xy(L, y)
-            pdf.cell(sum(widths), 7, "", border=0, fill=True, ln=0)
+            pdf.cell(sum(widths), 7.2, "", border=0, fill=True, ln=0)
         vals = [
             f"{pos_no}*" if captains else str(pos_no),
             r["Player"],
-            r[f"vs {opponent} — games"], r[f"vs {opponent} — avg"],
-            r[f"vs {opponent} — best"],
-            r[f"at {alley} — games"], r[f"at {alley} — avg"],
-            r[f"at {alley} — best"],
+            r.get("_season_avg", "-"),
+            r[f"vs {opponent} — games"], r[f"vs {opponent} — avg"], r[f"vs {opponent} — best"],
+            r[f"at {alley} — games"], r[f"at {alley} — avg"], r[f"at {alley} — best"],
         ]
         pdf.set_xy(L, y)
         pdf.set_text_color(*INK_RGB)
@@ -537,8 +544,8 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
             else:
                 pdf.set_font("Helvetica", "", 10)
                 al = "C"
-            pdf.cell(w, 7, _txt(v), border=0, align=al, ln=0)
-        y += 7
+            pdf.cell(w, 7.2, _txt(v), border=0, align=al, ln=0)
+        y += 7.2
 
     # ---- footer ------------------------------------------------------
     pdf.set_xy(L, pdf.h - 12)
