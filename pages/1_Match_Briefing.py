@@ -427,33 +427,33 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
 
     # ---- the fixture -------------------------------------------------
     pdf.set_xy(L, y)
-    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_font("Helvetica", "B", 15)
     pdf.set_text_color(*INK_RGB)
-    pdf.cell(W, 6, _txt(f"vs {opponent}   ·   at {alley}"), ln=1)
-    y += 9
+    pdf.cell(W, 8, _txt(f"vs {opponent}   -   at {alley}"), ln=1)
+    y += 12
 
     # ---- two record panels, side by side -----------------------------
     def panel(x, w, title, frame, our_avg, their_avg):
         pdf.set_xy(x, y)
-        pdf.set_font("Helvetica", "B", 9.5)
+        pdf.set_font("Helvetica", "B", 12)
         pdf.set_text_color(*INK_RGB)
-        pdf.cell(w, 5, _txt(title), ln=0)
+        pdf.cell(w, 6.4, _txt(title), ln=0)
 
         pdf.set_xy(x, y + 5)
-        pdf.set_font("Helvetica", "", 8.5)
+        pdf.set_font("Helvetica", "", 11)
         pdf.set_text_color(*GREY_RGB)
         if frame.empty:
-            pdf.cell(w, 5, _txt("No games recorded."), ln=0)
+            pdf.cell(w, 6.4, _txt("No games recorded."), ln=0)
             return
         played_n = len(frame)
         w_n = int((frame["result"] == "W").sum())
         l_n = int((frame["result"] == "L").sum())
         pct = round(100 * w_n / played_n) if played_n else 0
-        pdf.cell(w, 5, _txt(f"Played {played_n}   Won {w_n}   Lost {l_n}   ({pct}%)"), ln=0)
+        pdf.cell(w, 6.4, _txt(f"Played {played_n}   Won {w_n}   Lost {l_n}   ({pct}%)"), ln=0)
         pdf.set_xy(x, y + 10)
         pdf.set_text_color(*INK_RGB)
-        pdf.set_font("Helvetica", "", 8.5)
-        pdf.cell(w, 5, _txt(f"Our average {our_avg}   ·   Theirs {their_avg}"), ln=0)
+        pdf.set_font("Helvetica", "", 11)
+        pdf.cell(w, 6.4, _txt(f"Our average {our_avg}   -   Theirs {their_avg}"), ln=0)
 
     panel(L, W / 2 - 4, f"Record vs {opponent}", h2h,
           round(h2h["teamtotal"].mean(), 1) if len(h2h) else "—",
@@ -461,36 +461,36 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
     panel(L + W / 2 + 4, W / 2 - 4, f"Record at {alley}", at_alley,
           round(at_alley["teamtotal"].mean(), 1) if len(at_alley) else "—",
           round(at_alley["opptotal"].mean(), 1) if len(at_alley) else "—")
-    y += 19
+    y += 23
 
     # ---- recent meetings --------------------------------------------
     recent = h2h.sort_values("date", ascending=False).head(3) if len(h2h) else pd.DataFrame()
     if len(recent):
         pdf.set_xy(L, y)
-        pdf.set_font("Helvetica", "B", 9.5)
+        pdf.set_font("Helvetica", "B", 12)
         pdf.set_text_color(*INK_RGB)
-        pdf.cell(W, 5, _txt("Recent meetings"), ln=1)
-        y += 6
+        pdf.cell(W, 6.4, _txt("Recent meetings"), ln=1)
+        y += 8
         for _, g in recent.iterrows():
             res = g["result"]
             pdf.set_xy(L, y)
-            pdf.set_font("Helvetica", "B", 8.5)
+            pdf.set_font("Helvetica", "B", 11)
             pdf.set_text_color(*(WIN_RGB if res == "W" else LOSS_RGB))
-            pdf.cell(28, 5, _txt(f"{int(g['teamtotal'])}-{int(g['opptotal'])} ({res})"), ln=0)
-            pdf.set_font("Helvetica", "", 8.5)
+            pdf.cell(30, 6.4, _txt(f"{int(g['teamtotal'])}-{int(g['opptotal'])} ({res})"), ln=0)
+            pdf.set_font("Helvetica", "", 10)
             pdf.set_text_color(*GREY_RGB)
-            pdf.cell(W - 28, 5,
+            pdf.cell(W - 30, 6.4,
                      _txt(f"{g['season']}  ·  {g['venue']}  ·  {g['alley']}  ·  {g['date']:%d %b %Y}"),
                      ln=0)
-            y += 5.4
+            y += 7
         y += 3
 
     # ---- the line-up, in bowling order -------------------------------
     pdf.set_xy(L, y)
-    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_font("Helvetica", "B", 14)
     pdf.set_text_color(*INK_RGB)
-    pdf.cell(W, 6, _txt("The line-up (bowling order)"), ln=1)
-    y += 8
+    pdf.cell(W, 7, _txt("The line-up (bowling order)"), ln=1)
+    y += 10
 
     # Columns: #  |  Player  |  Current Season Av  |  vs <team> G/Avg/Best  |  at <alley> G/Avg/Best
     widths = [9, 34, 21, 15, 17, 17, 15, 17, 17]
@@ -513,7 +513,7 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
     # --- row 2: the column headings -----------------------------------
     pdf.set_xy(L, y)
     pdf.set_font("Helvetica", "B", 12)
-    heads = ["#", "Player", "Season Average", "G", "Avg", "Best", "G", "Avg", "Best"]
+    heads = ["#", "Player", "Season Avg", "G", "Avg", "Best", "G", "Avg", "Best"]
     for j, (w, htxt) in enumerate(zip(widths, heads)):
         al = "L" if j == 1 else "C"
         pdf.cell(w, 8.6, _txt(htxt), border=0, align=al, fill=True, ln=0)
