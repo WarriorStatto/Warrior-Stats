@@ -22,6 +22,40 @@ import streamlit as st
 
 from fpdf import FPDF
 
+# A TrueType face with a real pound sign. fpdf2's built-in Helvetica is
+# ASCII-only, so "£" comes out as "?". If neither file is present the code
+# falls back to Helvetica and money prints as "GBP".
+_FONT_DIRS = [
+    "/usr/share/fonts/truetype/dejavu",
+    "/usr/share/fonts/truetype/liberation",
+]
+FONT_FAMILY = "Helvetica"
+MONEY_FONT = "Helvetica"
+
+
+def _register_font(pdf):
+    """Try to register a font with a pound sign; return (family, is_custom)."""
+    import os as _os
+    candidates = [
+        ("DejaVu", "DejaVuSans.ttf", "DejaVuSans-Bold.ttf"),
+        ("Liberation", "LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf"),
+    ]
+    for family, regular, bold in candidates:
+        for d in _FONT_DIRS:
+            rp = _os.path.join(d, regular)
+            bp = _os.path.join(d, bold)
+            if _os.path.exists(rp):
+                try:
+                    pdf.add_font(family, "", rp)
+                    if _os.path.exists(bp):
+                        pdf.add_font(family, "B", bp)
+                    else:
+                        pdf.add_font(family, "B", rp)
+                    return family, True
+                except Exception:
+                    continue
+    return "Helvetica", False
+
 # -------------------------------------------------------------------
 # CONFIG
 # -------------------------------------------------------------------
@@ -387,12 +421,19 @@ WIN_RGB    = (26, 127, 55)
 LOSS_RGB   = (180, 35, 24)
 
 
-def _txt(v):
-    """Plain-ASCII text for the built-in core fonts.
+# When a TrueType face is registered these characters can be drawn as they
+# are; with the built-in core fonts they have to be folded to ASCII or they
+# arrive on the page as "?".
+RICH_TEXT = False
 
-    fpdf2's core fonts render anything outside ASCII as a question mark, so
-    en-dashes, curly quotes and ellipses are folded to their ASCII
-    equivalents before they reach the page.
+
+def _txt(v):
+    """Text safe for the font in use.
+
+    With a TrueType font the characters are kept as written. With the built-in
+    core fonts (ASCII only) en-dashes, curly quotes, ellipses and the pound
+    sign are folded to plain equivalents, because fpdf2 renders anything else
+    as a question mark.
     """
     s = str(v)
     for bad, good in (
@@ -401,6 +442,9 @@ def _txt(v):
         ("\u2026", "..."), ("\u00b7", "-"), ("\u00a0", " "),
     ):
         s = s.replace(bad, good)
+    if RICH_TEXT:
+        return s
+    s = s.replace("\u00a3", "GBP")
     return s.encode("ascii", "replace").decode("ascii")
 
 
@@ -467,6 +511,11 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
                        pos_df=None, jackpot=None):
     """One-page A4 briefing. Everything is measured in mm from the top-left."""
     pdf = FPDF(orientation="P", unit="mm", format="A4")
+    global RICH_TEXT
+    family, custom = _register_font(pdf)
+    RICH_TEXT = custom
+    base = family if custom else "Helvetica"
+    money = family if custom else "Helvetica"
     pdf.set_auto_page_break(auto=False)
     pdf.set_margins(16, 14, 16)
     pdf.add_page()
@@ -478,37 +527,38 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
     pdf.set_fill_color(*GREEN_RGB)
     pdf.rect(L, y, W, 15, style="F")
     pdf.set_xy(L + 3, y + 2.2)
-    pdf.set_font("Helvetica", "B", 15)
+    pdf.set_font(base, "B", 15)
     pdf.set_text_color(*INK_RGB)
     pdf.cell(W - 6, 7, _txt("Warriors — Match Briefing"), ln=0)
     pdf.set_xy(L + 3, y + 9.4)
-    pdf.set_font("Helvetica", "", 9)
+    pdf.set_font(base, "", 9)
     pdf.set_text_color(*GREY_RGB)
     pdf.cell(W - 6, 4, _txt(generated), ln=0)
     y += 20
 
     # ---- the fixture -------------------------------------------------
     pdf.set_xy(L, y)
-    pdf.set_font("Helvetica", "B", 15)
+    pdf.set_font(base, "B", 15)
     pdf.set_text_color(*INK_RGB)
     if jackpot is None:
         pdf.cell(W, 8, _txt(f"vs {opponent}   -   at {alley}"), ln=1)
     else:
         # fixture on the left, jackpot on the right of the same band
         pdf.cell(W * 0.62, 8, _txt(f"vs {opponent}   -   at {alley}"), ln=0)
-        pdf.set_font("Helvetica", "B", 13)
-        pdf.cell(W * 0.38, 8, _txt(f"Jackpot  £{jackpot}"), align="R", ln=1)
+        pdf.set_font(money, "B", 13)
+        pot_text = f"Jackpot  £{jackpot}"
+        pdf.cell(W * 0.38, 8, _txt(pot_text), align="R", ln=1)
     y += 12
 
     # ---- two record panels, side by side -----------------------------
     def panel(x, w, title, frame, our_avg, their_avg):
         pdf.set_xy(x, y)
-        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_font(base, "B", 12)
         pdf.set_text_color(*INK_RGB)
         pdf.cell(w, 6.4, _txt(title), ln=0)
 
         pdf.set_xy(x, y + 5)
-        pdf.set_font("Helvetica", "", 11)
+        pdf.set_font(base, "", 11)
         pdf.set_text_color(*GREY_RGB)
         if frame.empty:
             pdf.cell(w, 6.4, _txt("No games recorded."), ln=0)
@@ -520,7 +570,7 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
         pdf.cell(w, 6.4, _txt(f"Played {played_n}   Won {w_n}   Lost {l_n}   ({pct}%)"), ln=0)
         pdf.set_xy(x, y + 10)
         pdf.set_text_color(*INK_RGB)
-        pdf.set_font("Helvetica", "", 11)
+        pdf.set_font(base, "", 11)
         pdf.cell(w, 6.4, _txt(f"Our average {our_avg}   -   Theirs {their_avg}"), ln=0)
 
     panel(L, W / 2 - 4, f"Record vs {opponent}", h2h,
@@ -535,17 +585,17 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
     recent = h2h.sort_values("date", ascending=False).head(3) if len(h2h) else pd.DataFrame()
     if len(recent):
         pdf.set_xy(L, y)
-        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_font(base, "B", 12)
         pdf.set_text_color(*INK_RGB)
         pdf.cell(W, 6.4, _txt("Recent meetings"), ln=1)
         y += 8
         for _, g in recent.iterrows():
             res = g["result"]
             pdf.set_xy(L, y)
-            pdf.set_font("Helvetica", "B", 11)
+            pdf.set_font(base, "B", 11)
             pdf.set_text_color(*(WIN_RGB if res == "W" else LOSS_RGB))
             pdf.cell(30, 6.4, _txt(f"{int(g['teamtotal'])}-{int(g['opptotal'])} ({res})"), ln=0)
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font(base, "", 10)
             pdf.set_text_color(*GREY_RGB)
             pdf.cell(W - 30, 6.4,
                      _txt(f"{g['season']}  ·  {g['venue']}  ·  {g['alley']}  ·  {g['date']:%d %b %Y}"),
@@ -555,7 +605,7 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
 
     # ---- the line-up, in bowling order -------------------------------
     pdf.set_xy(L, y)
-    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_font(base, "B", 14)
     pdf.set_text_color(*INK_RGB)
     pdf.cell(W, 7, _txt("The line-up (bowling order)"), ln=1)
     y += 10
@@ -571,7 +621,7 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
     # --- row 1: group labels spanning their columns -------------------
     pdf.set_fill_color(*GREEN_FILL)
     pdf.set_text_color(*INK_RGB)
-    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_font(base, "B", 12)
     pdf.set_xy(L, y)
     pdf.cell(widths[0] + widths[1] + widths[2], 8.6, "", border=0, fill=True, ln=0)
     pdf.cell(sum(widths[3:6]), 8.6, _txt(f"vs {opponent}"), border=0, align="C", fill=True, ln=0)
@@ -580,7 +630,7 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
 
     # --- row 2: the column headings -----------------------------------
     pdf.set_xy(L, y)
-    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_font(base, "B", 12)
     heads = ["#", "Player", "Season Avg", "G", "Avg", "Best", "G", "Avg", "Best"]
     for j, (w, htxt) in enumerate(zip(widths, heads)):
         al = "L" if j == 1 else "C"
@@ -607,22 +657,22 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
         pdf.set_text_color(*INK_RGB)
         for j, (w, v) in enumerate(zip(widths, vals)):
             if j == 1:
-                pdf.set_font("Helvetica", "B", 13)
+                pdf.set_font(base, "B", 13)
                 al = "L"
             else:
-                pdf.set_font("Helvetica", "", 13)
+                pdf.set_font(base, "", 13)
                 al = "C"
             pdf.cell(w, 13.2, _txt(v), border=0, align=al, ln=0)
         y += 13.2
 
     # ---- footer ------------------------------------------------------
     pdf.set_xy(L, pdf.h - 12)
-    pdf.set_font("Helvetica", "", 8.5)
+    pdf.set_font(base, "", 8.5)
     pdf.set_text_color(*GREY_RGB)
     pdf.cell(W, 4, _txt("Warriors Skittles - Match Briefing"), align="L", ln=0)
     if any(r.get("_captains") for r in rows):
         pdf.set_xy(L, pdf.h - 8)
-        pdf.set_font("Helvetica", "", 8)
+        pdf.set_font(base, "", 8)
         pdf.cell(W, 4, _txt("Positions marked * are captain's choice (no qualifying record)."),
                  align="L", ln=0)
 
