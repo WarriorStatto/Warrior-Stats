@@ -186,8 +186,28 @@ except Exception as e:
 missing = sorted(_req_cols - set(df.columns))
 if missing:
     st.error(f"### Missing column(s): {', '.join(missing)}")
-    st.markdown("Found columns: " + ", ".join(sorted(df.columns)))
+    st.markdown("**Columns found in the file:**")
+    st.code(", ".join(sorted(df.columns)))
+    st.markdown(
+        "If a column you expect is absent, the CSV in the repo is probably an "
+        "older version — re-upload `skittles-import.csv` and reboot the app "
+        "(**Manage app → Reboot**)."
+    )
     st.stop()
+
+# Optional stat columns. When one is missing the app still runs and that
+# statistic simply reads as zero, rather than the whole page falling over.
+_optional = ["ticks", "spares", "fines", "winnings", "sunshine",
+             "missedsingle", "flopper", "spare9"]
+_absent = [c for c in _optional if c not in df.columns]
+for c in _absent:
+    df[c] = 0
+if _absent:
+    st.warning(
+        "These columns aren't in the data file, so their figures show as zero: "
+        + ", ".join(_absent)
+        + ". Re-upload the current `skittles-import.csv` to restore them."
+    )
 
 st.caption(f"Loaded {len(df):,} rows from `{_path}`")
 
