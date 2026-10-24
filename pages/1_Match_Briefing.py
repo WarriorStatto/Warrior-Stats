@@ -130,6 +130,48 @@ def load_positions(path):
 _pos_path = next((p for p in POSITION_CANDIDATES if os.path.exists(p)), None)
 pos_df = load_positions(_pos_path) if _pos_path else None
 
+
+
+
+
+# ---- the jackpot -------------------------------------------------------
+# One row per game, carrying the pot recorded on the scoresheet. The figure
+# on a briefing is THIS match's jackpot: the last recorded value plus the
+# pound this game adds.
+
+POT_CANDIDATES = [
+    "../skittles-pot.csv",
+    "skittles-pot.csv",
+    "data/skittles-pot.csv",
+]
+
+
+@st.cache_data
+def load_pot(path):
+    pt = pd.read_csv(path)
+    pt.columns = (pt.columns.astype(str).str.strip().str.lower()
+                    .str.replace(" ", "", regex=False))
+    if "pot" in pt.columns:
+        pt["pot"] = pd.to_numeric(pt["pot"], errors="coerce")
+    return pt
+
+
+_pot_path = next((p for p in POT_CANDIDATES if os.path.exists(p)), None)
+pot_df = load_pot(_pot_path) if _pot_path else None
+
+
+def next_jackpot(pot_frame):
+    """The jackpot on offer at this game: last recorded pot + £1, rounded."""
+    if pot_frame is None or pot_frame.empty or "pot" not in pot_frame.columns:
+        return None
+    last = pot_frame["pot"].dropna()
+    if last.empty:
+        return None
+    return int(round(float(last.iloc[-1]) + 1))
+
+
+JACKPOT = next_jackpot(pot_df)
+
 df = load_data(_path)
 
 # the latest season in the data — that's the one whose average the briefing shows
@@ -155,6 +197,28 @@ opponent = colA.selectbox("Opponent", opponents, key="brief_opp")
 
 alleys = sorted(df["alley"].dropna().unique())
 alley = colB.selectbox("Alley", alleys, key="brief_alley")
+
+# A team we have never played won't be in the dropdown — type the name here.
+new_team = st.text_input(
+    "Playing a team not in the list? Type their name",
+    value="",
+    key="brief_newteam",
+    placeholder="e.g. Sleepers",
+)
+if new_team.strip():
+    opponent = new_team.strip()
+    st.caption(
+        f"Briefing for **{opponent}** — a first meeting, so no head-to-head "
+        f"history. The alley and line-up records below still apply."
+    )
+
+if JACKPOT is not None:
+    _pot_col, _pot_note = st.columns([1, 3])
+    _pot_col.metric("Jackpot", f"£{JACKPOT}")
+    _pot_note.markdown(
+        "On offer at this match — won on a score of 80 or more, "
+        "or by a player going tick-free."
+    )
 
 squad = sorted(df["player"].dropna().unique())
 lineup = st.multiselect(
@@ -202,7 +266,10 @@ if played:
                 </div>""",
             unsafe_allow_html=True)
 else:
-    st.info(f"No previous meetings with {opponent} in the data.")
+    st.info(
+        f"No previous meetings with {opponent} in the data — this is a "
+        f"first meeting. The alley and line-up records below still apply."
+    )
 
 
 # -------------------------------------------------------------------
