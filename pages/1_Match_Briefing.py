@@ -25,9 +25,16 @@ from fpdf import FPDF
 # A TrueType face with a real pound sign. fpdf2's built-in Helvetica is
 # ASCII-only, so "£" comes out as "?". If neither file is present the code
 # falls back to Helvetica and money prints as "GBP".
-_FONT_DIRS = [
+# The reliable source is a font committed alongside the page: `fonts/` next to
+# `pages/`, or at the repo root. System fonts are tried after that, since
+# Streamlit's image does not always carry them.
+FONT_DIRS = [
+    "fonts",                     # pages/fonts/  (this file lives in pages/)
+    "../fonts",                  # fonts/ at the repo root
+    "data/fonts",
     "/usr/share/fonts/truetype/dejavu",
     "/usr/share/fonts/truetype/liberation",
+    "/usr/share/fonts/truetype/noto",
 ]
 FONT_FAMILY = "Helvetica"
 MONEY_FONT = "Helvetica"
@@ -37,20 +44,19 @@ def _register_font(pdf):
     """Try to register a font with a pound sign; return (family, is_custom)."""
     import os as _os
     candidates = [
+        ("DejaVuSans", "DejaVuSans.ttf", "DejaVuSans-Bold.ttf"),
         ("DejaVu", "DejaVuSans.ttf", "DejaVuSans-Bold.ttf"),
         ("Liberation", "LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf"),
+        ("NotoSans", "NotoSans-Regular.ttf", "NotoSans-Bold.ttf"),
     ]
     for family, regular, bold in candidates:
-        for d in _FONT_DIRS:
+        for d in FONT_DIRS:
             rp = _os.path.join(d, regular)
             bp = _os.path.join(d, bold)
             if _os.path.exists(rp):
                 try:
                     pdf.add_font(family, "", rp)
-                    if _os.path.exists(bp):
-                        pdf.add_font(family, "B", bp)
-                    else:
-                        pdf.add_font(family, "B", rp)
+                    pdf.add_font(family, "B", bp if _os.path.exists(bp) else rp)
                     return family, True
                 except Exception:
                     continue
