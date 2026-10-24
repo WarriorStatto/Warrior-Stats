@@ -116,7 +116,7 @@ COLUMN_ALIASES = {
     "opptotal": "opp_total",
 }
 
-NUMERIC_COLS = ["score", "ticks", "spares", "fines", "sunshine",
+NUMERIC_COLS = ["score", "ticks", "spares", "fines", "winnings", "sunshine",
                 "missedsingle", "flopper", "spare9", "team_total", "opp_total"]
 
 
@@ -158,8 +158,11 @@ def load_data(path):
 
 
 def _fines_with_pound(df):
-    """Format a fines column as £0.00 for display."""
-    return df.assign(Fines=df["Fines"].map(lambda v: f"£{v:,.2f}"))
+    """Format the money columns as £0.00 for display."""
+    out = df.assign(Fines=df["Fines"].map(lambda v: f"£{v:,.2f}"))
+    if "Winnings" in out.columns:
+        out = out.assign(Winnings=out["Winnings"].map(lambda v: f"£{v:,.2f}"))
+    return out
 
 
 _req_cols = {"season", "game", "date", "venue", "alley", "opponent", "player", "score"}
@@ -446,13 +449,14 @@ with tab_clutch:
 
 # ------------------------------------------------------- EXTRAS
 with tab_extra:
-    st.markdown("### Ticks, spares & fines")
+    st.markdown("### Ticks, spares, fines & winnings")
 
     x = (f.groupby("player")
            .agg(Games=("gamekey", "nunique"),
                 Ticks=("ticks", "sum"),
                 Spares=("spares", "sum"),
                 Fines=("fines", "sum"),
+                Winnings=("winnings", "sum"),
                 Sunshine=("sunshine", "sum"),
                 MissedSingle=("missedsingle", "sum"),
                 Flopper=("flopper", "sum"),
@@ -467,15 +471,17 @@ with tab_extra:
 
     st.dataframe(
         x[["player", "Games", "Ticks", "Tick Avg", "Spares",
-           "Fines", "Sunshine", "MissedSingle", "Flopper", "Spare9"]],
+           "Fines", "Winnings", "Sunshine", "MissedSingle", "Flopper", "Spare9"]],
         hide_index=True, use_container_width=True)
 
     st.markdown("#### Totals")
-    t1, t2, t3, t4 = st.columns(4)
+    t1, t2, t3, t4, t5 = st.columns(5)
     t1.metric("Ticks", int(f["ticks"].sum()))
     t2.metric("Tick average", round(f["ticks"].sum() / max(f["gamekey"].nunique(), 1), 2))
     t3.metric("Spares", int(f["spares"].sum()))
     t4.metric("Fines", f"£{f['fines'].sum():,.2f}")
+    if "winnings" in f.columns:
+        t5.metric("Winnings", f"£{f['winnings'].sum():,.2f}")
 
 
 # -------------------------------------------------------------------
