@@ -213,12 +213,7 @@ if new_team.strip():
     )
 
 if JACKPOT is not None:
-    _pot_col, _pot_note = st.columns([1, 3])
-    _pot_col.metric("Jackpot", f"£{JACKPOT}")
-    _pot_note.markdown(
-        "On offer at this match — won on a score of 80 or more, "
-        "or by a player going tick-free."
-    )
+    st.metric("Jackpot", f"£{JACKPOT}")
 
 squad = sorted(df["player"].dropna().unique())
 lineup = st.multiselect(
@@ -469,7 +464,7 @@ def _bowling_order(focus, pos_df, min_games=3):
 
 
 def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
-                       pos_df=None):
+                       pos_df=None, jackpot=None):
     """One-page A4 briefing. Everything is measured in mm from the top-left."""
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=False)
@@ -496,7 +491,13 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
     pdf.set_xy(L, y)
     pdf.set_font("Helvetica", "B", 15)
     pdf.set_text_color(*INK_RGB)
-    pdf.cell(W, 8, _txt(f"vs {opponent}   -   at {alley}"), ln=1)
+    if jackpot is None:
+        pdf.cell(W, 8, _txt(f"vs {opponent}   -   at {alley}"), ln=1)
+    else:
+        # fixture on the left, jackpot on the right of the same band
+        pdf.cell(W * 0.62, 8, _txt(f"vs {opponent}   -   at {alley}"), ln=0)
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.cell(W * 0.38, 8, _txt(f"Jackpot  £{jackpot}"), align="R", ln=1)
     y += 12
 
     # ---- two record panels, side by side -----------------------------
@@ -633,6 +634,7 @@ pdf_bytes = build_briefing_pdf(
     opponent, alley, focus, h2h, at_alley, rows,
     generated=f"Generated {_dt.date.today():%d %B %Y}",
     pos_df=pos_df,
+    jackpot=JACKPOT,
 )
 st.download_button(
     "🖨️ Download printable briefing (A4 PDF)",
