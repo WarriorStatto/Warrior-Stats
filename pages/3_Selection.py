@@ -235,15 +235,14 @@ def joint_positions(values, take, best_first=True):
 
 
 def wait_key(p):
-    """Longest wait first: earliest last appearance, then best last score,
-    then best previous-season average."""
+    """Longest wait first. Two players who last appeared in the SAME game are
+    separated by the score they made that night — not by any season average,
+    which belongs only to the rule for players who have not played yet."""
     seen = last_seen.get(p, "")
     score = last_scores.get(p)
-    prev_avg = _prev.get(p, 0)
     return (
         seen,                                     # earlier = waited longer
-        -(score if pd.notna(score) else -1),      # then highest last score
-        -prev_avg,                                # then best last-season avg
+        -(score if pd.notna(score) else -1),      # then the score that night
     )
 
 
@@ -329,10 +328,7 @@ else:
         if p in bottom:
             bits.append("bottom 4 last game — pushed back")
         if pd.notna(s_last):
-            bits.append(f"scored {int(s_last)}")
-        prev_avg = _prev.get(p)
-        if prev_avg is not None:
-            bits.append(f"{PREVIOUS} average {prev_avg:.1f}")
+            bits.append(f"scored {int(s_last)} that night")
         picks.append({"player": p, "rule": "Longest since played",
                       "why": " · ".join(bits)})
         taken.add(p)
@@ -422,9 +418,15 @@ for pick in picks:
     )
 
 chosen = []
-# slots are laid out in bowling order, but every reason comes from the pick
-# itself — never from the row it happens to sit on.
+# Slots are laid out in bowling order, and no player may appear in two of
+# them. Each dropdown offers its own pick plus the players not already taken
+# by another slot, so a duplicate can only arise by changing two at once —
+# and that is checked separately below.
 slot_picks = sorted(picks, key=lambda r: r.get("bowl_pos", 99))
+
+# the default eight, in bowling order
+_default_order = [pk["player"] for pk in slot_picks]
+
 for i, pick in enumerate(slot_picks):
     auto = pick["player"]
     pos_no = pick.get("bowl_pos", i + 1)
@@ -432,12 +434,25 @@ for i, pick in enumerate(slot_picks):
     col_pos, col_pick, col_why = st.columns([1, 3, 4])
     with col_pos:
         st.markdown(f"**{pos_no}**")
+
+    # who is already sitting in another slot on this run through the page
+    _live = list(st.session_state.get("_live") or _default_order)
+    elsewhere = {n for j, n in enumerate(_live) if j != i and n}
+
+    # this dropdown offers its own pick, plus anyone available who is not
+    # already taken by another slot
+    options = [auto] + [p for p in available if p != auto and p not in elsewhere]
+
     with col_pick:
-        options = [auto] + [p for p in available if p != auto]
         sel = st.selectbox(
             f"Position {pos_no}", options,
             index=0, key=f"pick_{pos_no}", label_visibility="collapsed",
         )
+    _live = list(st.session_state.get("_live") or _default_order)
+    if i < len(_live):
+        _live[i] = sel
+    st.session_state["_live"] = _live
+
     with col_why:
         # the reason travels with the player, never with the row
         if sel != auto:
