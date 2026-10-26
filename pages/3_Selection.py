@@ -204,26 +204,48 @@ if not available:
 # -------------------------------------------------------------------
 # APPLY THE RULES
 # -------------------------------------------------------------------
+#
+# Rule 1  season start      top 8 by career average, available
+# Rule 2  every week        the 4 highest scorers from the PREVIOUS game,
+#                           if available. If fewer than four reply, the
+#                           unfilled slots pass straight to the pool below —
+#                           they are NOT given to the 5th, 6th ... scorer.
+# Rule 3  priority pool     players who have NOT played this season go in
+#                           first, best previous-season average first.
+# Rule 4  the rest          once the unplayed are used up, remaining slots
+#                           go to whoever has waited longest. Ties broken by
+#                           the last game's score, then previous season's
+#                           average.
 
-picks = []            # (position, player, rule, why)
+played_this_season = set(_cur["player"].dropna().unique())
+
+
+def wait_key(p):
+    """Longest wait first: earliest last appearance, then best last score,
+    then best previous-season average."""
+    seen = last_seen.get(p, "")
+    score = last_scores.get(p)
+    prev_avg = _prev.get(p, 0)
+    return (
+        seen,                                     # earlier = waited longer
+        -(score if pd.notna(score) else -1),      # then highest last score
+        -prev_avg,                                # then best last-season avg
+    )
+
+
+picks = []
 taken = set()
 
+# --- rule 2: the previous game's top four, if available ------------
+last_game_pool = [(p, last_scores.get(p)) for p in available
+                  if p in last_scores and pd.notna(last_scores.get(p))]
+last_game_pool.sort(key=lambda t: -t[1])
 
-def rule2_picks():
-    """The 4 highest scorers from the previous game, if available."""
-    scored = [(p, last_scores.get(p)) for p in available if p in last_scores]
-    scored = [(p, s) for p, s in scored if pd.notna(s)]
-    scored.sort(key=lambda t: -t[1])
-    return scored[:4]
-
-
-# --- rule 2 first: it always runs ---------------------------------
-for p, s in rule2_picks():
+for p, score in last_game_pool[:4]:
     picks.append({
         "player": p,
         "rule": "Last game — top 4",
-        "why": f"scored {int(s)} in the last game",
-        "auto": True,
+        "why": f"scored {int(score)} in the last game",
     })
     taken.add(p)
 
@@ -233,56 +255,39 @@ if not _cur_games:
     rest.sort(key=lambda p: -_career.get(p, 0))
     for p in rest[:8 - len(picks)]:
         picks.append({
-            "player": p, "rule": "Season start — top 8",
-            "why": f"career average {_career.get(p, 0):.1f}", "auto": True,
+            "player": p,
+            "rule": "Season start — top 8",
+            "why": f"career average {_career.get(p, 0):.1f}",
         })
         taken.add(p)
+else:
+    # --- rule 3: the unplayed go in first, best previous average first
+    unplayed = [p for p in available
+                if p not in played_this_season and p not in taken]
+    unplayed.sort(key=lambda p: -_prev.get(p, 0))
+    for p in unplayed[:8 - len(picks)]:
+        avg = _prev.get(p)
+        why = (f"not yet played this season · {PREVIOUS} average {avg:.1f}"
+               if avg is not None
+               else f"not yet played this season · no games in {PREVIOUS}")
+        picks.append({"player": p, "rule": "Not yet played this season",
+                      "why": why})
+        taken.add(p)
 
-# --- rule 3: until everyone has played, by previous seasons' average
-elif everyone_played:
+    # --- rule 4: the rest, by longest wait --------------------------
     rest = [p for p in available if p not in taken]
-    # longest wait first; then last game score; then last season's average
-    def wait_key(p):
-        seen = last_seen.get(p, "")
-        score = last_scores.get(p)
-        prev_avg = _prev.get(p, 0)
-        return (
-            seen,                                     # earliest appearance first
-            -(score if pd.notna(score) else -1),      # then highest last score
-            -prev_avg,                                # then best last-season avg
-        )
     rest.sort(key=wait_key)
     for p in rest[:8 - len(picks)]:
-        seen = last_seen.get(p, "never")
-        picks.append({
-            "player": p, "rule": "Longest since played",
-            "why": f"last played {seen}", "auto": True,
-        })
-        taken.add(p)
-
-# --- rule 4: the opening weeks, filled on last season's average ----
-else:
-    rest = [p for p in available if p not in taken]
-    rest.sort(key=lambda p: -_prev.get(p, 0))
-    for p in rest[:8 - len(picks)]:
-        avg = _prev.get(p)
-        why = (f"{PREVIOUS} average {avg:.1f}" if avg is not None
-               else f"no games in {PREVIOUS}")
-        picks.append({
-            "player": p, "rule": f"Best of {PREVIOUS}",
-            "why": why, "auto": True,
-        })
-        taken.add(p)
-
-# --- anyone still short (fewer than 8 available) --------------------
-if len(picks) < 8:
-    rest = [p for p in available if p not in taken]
-    rest.sort(key=lambda p: -_career.get(p, 0))
-    for p in rest[:8 - len(picks)]:
-        picks.append({
-            "player": p, "rule": "Next best available",
-            "why": f"only {len(available)} available", "auto": True,
-        })
+        seen = last_seen.get(p)
+        s_last = last_scores.get(p)
+        bits = [f"last played {seen}" if seen else "no previous games"]
+        if pd.notna(s_last):
+            bits.append(f"scored {int(s_last)}")
+        prev_avg = _prev.get(p)
+        if prev_avg is not None:
+            bits.append(f"{PREVIOUS} average {prev_avg:.1f}")
+        picks.append({"player": p, "rule": "Longest since played",
+                      "why": " · ".join(bits)})
         taken.add(p)
 
 
@@ -326,7 +331,15 @@ def bowling_order(players, frame, min_games=3):
 
 
 order = bowling_order([p["player"] for p in picks], pos_df)
+
+# Sort by bowling position, but keep each pick's RULE attached to its player.
+# Sorting the whole dict keeps the reasoning with the person, so the label
+# never drifts onto a different row.
 picks.sort(key=lambda r: order.get(r["player"], 99))
+
+# also record the selection order (rule before bowling order)
+for i, pick in enumerate(picks, start=1):
+    pick["bowl_pos"] = order.get(pick["player"], i)
 
 
 # -------------------------------------------------------------------
@@ -352,6 +365,15 @@ else:
 st.caption("Change any slot below — an override is marked, and what the app "
            "would have chosen stays visible.")
 
+# the selection itself, in the order the rules produced it
+st.markdown("##### Who the rules picked")
+for pick in sorted(picks, key=lambda r: r.get("bowl_pos", 99)):
+    st.markdown(
+        f'<div class="sel-why">• <b>{pick["player"]}</b> — {pick["rule"]} '
+        f'({pick["why"]})</div>',
+        unsafe_allow_html=True,
+    )
+
 chosen = []
 for i, pick in enumerate(picks):
     auto = pick["player"]
@@ -367,16 +389,18 @@ for i, pick in enumerate(picks):
             index=0, key=f"pick_{pos_no}", label_visibility="collapsed",
         )
     with col_why:
+        # the reason travels with the player, never with the row
         if sel != auto:
             st.markdown(
                 f'<div class="sel-why"><b>{sel}</b> — manual override. '
-                f'The app would have picked <b>{auto}</b> '
+                f'The app picked <b>{auto}</b> '
                 f'({pick["rule"]}: {pick["why"]}).</div>',
                 unsafe_allow_html=True,
             )
         else:
             st.markdown(
-                f'<div class="sel-why">{pick["rule"]} — {pick["why"]}</div>',
+                f'<div class="sel-why">picked by <b>{pick["rule"]}</b> — '
+                f'{pick["why"]}</div>',
                 unsafe_allow_html=True,
             )
     chosen.append(sel)
@@ -416,7 +440,33 @@ elif len(chosen) < 8:
 else:
     st.success("Eight players, no duplicates. Ready to bowl.")
 
+# -------------------------------------------------------------------
+# CARRY THE SELECTION TO THE MATCH BRIEFING
+# -------------------------------------------------------------------
+#
+# Streamlit shares st.session_state across pages in the same app, so the
+# chosen eight and their bowling order are written there for the briefing
+# page to read. The PDF then prints this exact line-up and order.
+
 st.divider()
+st.markdown("### 4. Send to the match briefing")
+
+if len(chosen) == 8 and len(set(chosen)) == 8:
+    st.session_state["lineup"] = list(dict.fromkeys(chosen))
+    st.session_state["bowl_order"] = {name: i + 1 for i, name in enumerate(chosen)}
+    st.success(
+        "The eight, in this bowling order, are now on the **Match Briefing** "
+        "page — open it and the PDF will use them."
+    )
+    st.markdown(
+        " · ".join(f"**{i+1}** {n}" for i, n in enumerate(chosen))
+    )
+else:
+    st.warning(
+        "A selection of exactly eight, with no duplicates, is needed before "
+        "it can be sent to the briefing page."
+    )
+
 st.caption(
     f"Based on {len(df):,} player-games. Availability is not stored — "
     f"re-tick each week."

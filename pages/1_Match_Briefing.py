@@ -256,10 +256,25 @@ if JACKPOT is not None:
     st.metric("Jackpot", f"£{JACKPOT}")
 
 squad = sorted(df["player"].dropna().unique())
+
+# A selection made on the Selection page arrives here, so the briefing — and
+# the printable PDF — use the same eight, in the same bowling order.
+FROM_SELECTION = st.session_state.get("lineup") or []
+BOWL_ORDER = st.session_state.get("bowl_order") or {}
+
+if FROM_SELECTION:
+    st.markdown("##### The selected side")
+    st.caption("Arrived from the Selection page. Change it below if you need to.")
+    _order_bits = " · ".join(
+        f"**{BOWL_ORDER.get(n, i + 1)}** {n}"
+        for i, n in enumerate(FROM_SELECTION)
+    )
+    st.markdown(_order_bits)
+
 lineup = st.multiselect(
     "Players in the line-up (leave empty for the whole squad)",
     squad,
-    default=[],
+    default=FROM_SELECTION,
     key="brief_lineup",
 )
 
