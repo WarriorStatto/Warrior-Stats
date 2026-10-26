@@ -220,6 +220,20 @@ if not available:
 played_this_season = set(_cur["player"].dropna().unique())
 
 
+def joint_positions(values, take, best_first=True):
+    """Indices of the joint winners of `take` places.
+
+    A tie is never split: if the 4th and 5th best values are equal, both are
+    returned. So this can return more than `take` entries.
+    """
+    ordered = sorted(enumerate(values),
+                     key=lambda t: (-t[1] if best_first else t[1]))
+    if len(ordered) <= take:
+        return [i for i, _ in ordered]
+    cut = ordered[take - 1][1]                      # the value on the boundary
+    return [i for i, v in ordered if (v >= cut if best_first else v <= cut)]
+
+
 def wait_key(p):
     """Longest wait first: earliest last appearance, then best last score,
     then best previous-season average."""
@@ -237,17 +251,25 @@ picks = []
 taken = set()
 
 # --- rule 2: the previous game's top four, if available ------------
-last_game_pool = [(p, last_scores.get(p)) for p in available
-                  if p in last_scores and pd.notna(last_scores.get(p))]
-last_game_pool.sort(key=lambda t: -t[1])
+last_game_pool = sorted(
+    [(p, last_scores.get(p)) for p in available
+     if p in last_scores and pd.notna(last_scores.get(p))],
+    key=lambda t: -t[1],
+)
 
-for p, score in last_game_pool[:4]:
-    picks.append({
-        "player": p,
-        "rule": "Last game — top 4",
-        "why": f"scored {int(score)} in the last game",
-    })
-    taken.add(p)
+if last_game_pool:
+    scores = [sc for _, sc in last_game_pool]
+    keep = joint_positions(scores, 4, best_first=True)
+    names_in = [last_game_pool[i][0] for i in keep]
+    joint = len(keep) > 4
+    for p in names_in:
+        picks.append({
+            "player": p,
+            "rule": "Last game — top 4",
+            "why": (f"scored {int(last_scores[p])} in the last game"
+                    + (" · joint place, tie not split" if joint else "")),
+        })
+        taken.add(p)
 
 # --- rule 1: the season's opening selection ------------------------
 if not _cur_games:
@@ -275,12 +297,23 @@ else:
         taken.add(p)
 
     # --- rule 4: the rest, by longest wait --------------------------
+    # The four lowest scorers from the last game drop to the back of the
+    # queue, however long they have waited. Ties on that boundary are not
+    # split, so possibly more than four go back.
+    bottom = set()
+    if last_game_pool:
+        _sc = [sc for _, sc in last_game_pool]
+        for i in joint_positions(_sc, 4, best_first=False):
+            bottom.add(last_game_pool[i][0])
+
     rest = [p for p in available if p not in taken]
-    rest.sort(key=wait_key)
+    rest.sort(key=lambda p: (p in bottom, ) + wait_key(p))
     for p in rest[:8 - len(picks)]:
         seen = last_seen.get(p)
         s_last = last_scores.get(p)
         bits = [f"last played {seen}" if seen else "no previous games"]
+        if p in bottom:
+            bits.append("bottom 4 last game — pushed back")
         if pd.notna(s_last):
             bits.append(f"scored {int(s_last)}")
         prev_avg = _prev.get(p)
