@@ -315,10 +315,10 @@ else:
     # queue, however long they have waited. Ties on that boundary are not
     # split, so possibly more than four go back.
     bottom = set()
-    if last_game_pool:
-        _sc = [sc for _, sc in last_game_pool]
+    if match_pool:
+        _sc = [sc for _, sc in match_pool]
         for i in joint_positions(_sc, 4, best_first=False):
-            bottom.add(last_game_pool[i][0])
+            bottom.add(match_pool[i][0])
 
     rest = [p for p in available if p not in taken]
     rest.sort(key=lambda p: (p in bottom, ) + wait_key(p))
