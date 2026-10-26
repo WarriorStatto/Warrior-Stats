@@ -251,25 +251,39 @@ picks = []
 taken = set()
 
 # --- rule 2: the previous game's top four, if available ------------
-last_game_pool = sorted(
-    [(p, last_scores.get(p)) for p in available
-     if p in last_scores and pd.notna(last_scores.get(p))],
+# The top four belong to the MATCH, not to whoever replied. Work them out
+# from everyone who played that night, then keep only those who are available.
+# If one of the four is unavailable his slot stays EMPTY and passes to the
+# pool below — the 5th-highest scorer does not move up into it.
+match_pool = sorted(
+    [(p, sc) for p, sc in last_scores.items() if pd.notna(sc)],
     key=lambda t: -t[1],
 )
 
-if last_game_pool:
-    scores = [sc for _, sc in last_game_pool]
+top4_names = []
+if match_pool:
+    scores = [sc for _, sc in match_pool]
     keep = joint_positions(scores, 4, best_first=True)
-    names_in = [last_game_pool[i][0] for i in keep]
-    joint = len(keep) > 4
-    for p in names_in:
-        picks.append({
-            "player": p,
-            "rule": "Last game — top 4",
-            "why": (f"scored {int(last_scores[p])} in the last game"
-                    + (" · joint place, tie not split" if joint else "")),
-        })
-        taken.add(p)
+    top4_names = [match_pool[i][0] for i in keep]
+
+top4_in = [p for p in top4_names if p in available]
+missing = [p for p in top4_names if p not in available]
+
+for p in top4_in:
+    picks.append({
+        "player": p,
+        "rule": "Last game — top 4",
+        "why": (f"scored {int(last_scores[p])} in the last game"
+                + (f" · top 4 of the match, {len(top4_names)} joint"
+                   if len(top4_names) > 4 else "")),
+    })
+    taken.add(p)
+if missing:
+    st.caption(
+        "Not available from last game's top four: "
+        + ", ".join(f"**{m}**" for m in missing)
+        + " — those slots pass to the pool below."
+    )
 
 # --- rule 1: the season's opening selection ------------------------
 if not _cur_games:
