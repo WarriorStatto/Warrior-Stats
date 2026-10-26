@@ -365,13 +365,13 @@ def bowling_order(players, frame, min_games=3):
 
 order = bowling_order([p["player"] for p in picks], pos_df)
 
-# Sort by bowling position, but keep each pick's RULE attached to its player.
-# Sorting the whole dict keeps the reasoning with the person, so the label
-# never drifts onto a different row.
-picks.sort(key=lambda r: order.get(r["player"], 99))
-
-# also record the selection order (rule before bowling order)
+# `picks` stays in SELECTION order — the order the rules produced it. The
+# bowling position is recorded on each pick and used only to order the slots
+# below. Never re-sort the list itself: the reason belongs to the player, and
+# re-sorting a list whose labels are read by position is what put the wrong
+# rule against the wrong name.
 for i, pick in enumerate(picks, start=1):
+    pick["pick_no"] = i
     pick["bowl_pos"] = order.get(pick["player"], i)
 
 
@@ -400,7 +400,7 @@ st.caption("Change any slot below — an override is marked, and what the app "
 
 # the selection itself, in the order the rules produced it
 st.markdown("##### Who the rules picked")
-for pick in sorted(picks, key=lambda r: r.get("bowl_pos", 99)):
+for pick in picks:
     st.markdown(
         f'<div class="sel-why">• <b>{pick["player"]}</b> — {pick["rule"]} '
         f'({pick["why"]})</div>',
@@ -408,9 +408,12 @@ for pick in sorted(picks, key=lambda r: r.get("bowl_pos", 99)):
     )
 
 chosen = []
-for i, pick in enumerate(picks):
+# slots are laid out in bowling order, but every reason comes from the pick
+# itself — never from the row it happens to sit on.
+slot_picks = sorted(picks, key=lambda r: r.get("bowl_pos", 99))
+for i, pick in enumerate(slot_picks):
     auto = pick["player"]
-    pos_no = order.get(auto, i + 1)
+    pos_no = pick.get("bowl_pos", i + 1)
 
     col_pos, col_pick, col_why = st.columns([1, 3, 4])
     with col_pos:
