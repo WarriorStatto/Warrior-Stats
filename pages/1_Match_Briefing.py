@@ -424,7 +424,17 @@ for p in focus:
         f"at {alley} — W–L": a_record,
     })
 
-lineup_df = pd.DataFrame(rows)
+# The table is shown in the same order the PDF will print: the selection's
+# order when there is one, otherwise the calculated blend.
+if FROM_SELECTION:
+    _display = [r for n in FROM_SELECTION for r in rows if r["Player"] == n]
+    _display += [r for r in rows if r["Player"] not in FROM_SELECTION]
+else:
+    # no selection: fall back to the calculated order, worked out below
+    _display = rows
+
+lineup_df = pd.DataFrame(_display)
+lineup_df = lineup_df.rename(columns={"_season_avg": "Season Avg"})
 st.dataframe(lineup_df, hide_index=True, use_container_width=True)
 
 # a quick read on who travels well
@@ -671,8 +681,18 @@ def build_briefing_pdf(opponent, alley, focus, h2h, at_alley, rows, generated,
         pdf.cell(w, 8.6, _txt(htxt), border=0, align=al, fill=True, ln=0)
     y += 9.4
 
-    order = _bowling_order([r["Player"] for r in rows], pos_df)
-    ordered = sorted(rows, key=lambda r: order.get(r["Player"], (99, True))[0])
+    # A selection arriving from the Selection page fixes BOTH the eight and
+    # their bowling order. Only when there is no selection does the order get
+    # calculated from the position blend — recalculating it here would silently
+    # throw away the captain's arrangement.
+    if FROM_SELECTION:
+        ordered = [r for n in FROM_SELECTION for r in rows if r["Player"] == n]
+        # anyone in rows but not in the selection (should not happen) goes last
+        ordered += [r for r in rows if r["Player"] not in FROM_SELECTION]
+        order = {n: (i + 1, False) for i, n in enumerate(FROM_SELECTION)}
+    else:
+        order = _bowling_order([r["Player"] for r in rows], pos_df)
+        ordered = sorted(rows, key=lambda r: order.get(r["Player"], (99, True))[0])
 
     for i, r in enumerate(ordered):
         pos_no, captains = order.get(r["Player"], (i + 1, True))
