@@ -41,7 +41,6 @@ screen so nothing is lost.
 import os
 
 import pandas as pd
-import numpy as np
 import streamlit as st
 
 st.set_page_config(
@@ -417,58 +416,69 @@ for pick in picks:
         unsafe_allow_html=True,
     )
 
-chosen = []
-# Slots are laid out in bowling order, and no player may appear in two of
-# them. Each dropdown offers its own pick plus the players not already taken
-# by another slot, so a duplicate can only arise by changing two at once —
-# and that is checked separately below.
+# The rules decide WHO is selected; this section is only for arranging those
+# eight into bowling order. Up/down buttons are quicker and safer than eight
+# linked dropdowns, because moving one player simply swaps places and can never
+# create a duplicate.
 slot_picks = sorted(picks, key=lambda r: r.get("bowl_pos", 99))
-
-# the default eight, in bowling order
 _default_order = [pk["player"] for pk in slot_picks]
+_reason_by_player = {pk["player"]: pk for pk in picks}
+_order_signature = tuple(_default_order)
 
-for i, pick in enumerate(slot_picks):
-    auto = pick["player"]
-    pos_no = pick.get("bowl_pos", i + 1)
+# Reset the working order whenever the rules produce a different eight.
+if st.session_state.get("selection_signature") != _order_signature:
+    st.session_state["selection_order"] = list(_default_order)
+    st.session_state["selection_signature"] = _order_signature
 
-    col_pos, col_pick, col_why = st.columns([1, 3, 4])
+chosen = list(st.session_state.get("selection_order", _default_order))
+if len(chosen) != len(_default_order) or set(chosen) != set(_default_order):
+    chosen = list(_default_order)
+    st.session_state["selection_order"] = chosen
+
+
+def move_player(index, step):
+    """Swap a player with the row immediately above or below."""
+    order_now = list(st.session_state["selection_order"])
+    other = index + step
+    if 0 <= other < len(order_now):
+        order_now[index], order_now[other] = order_now[other], order_now[index]
+        st.session_state["selection_order"] = order_now
+
+
+button_col, note_col = st.columns([2, 5])
+with button_col:
+    if st.button("Reset suggested order", use_container_width=True):
+        st.session_state["selection_order"] = list(_default_order)
+        st.rerun()
+with note_col:
+    st.caption("Use the arrows to swap a player one place at a time. No duplicates are possible.")
+
+chosen = list(st.session_state["selection_order"])
+for i, player in enumerate(chosen):
+    reason = _reason_by_player[player]
+    col_pos, col_name, col_up, col_down, col_why = st.columns([0.7, 2.2, 0.7, 0.7, 4.7])
     with col_pos:
-        st.markdown(f"**{pos_no}**")
-
-    # who is already sitting in another slot on this run through the page
-    _live = list(st.session_state.get("_live") or _default_order)
-    elsewhere = {n for j, n in enumerate(_live) if j != i and n}
-
-    # this dropdown offers its own pick, plus anyone available who is not
-    # already taken by another slot
-    options = [auto] + [p for p in available if p != auto and p not in elsewhere]
-
-    with col_pick:
-        sel = st.selectbox(
-            f"Position {pos_no}", options,
-            index=0, key=f"pick_{pos_no}", label_visibility="collapsed",
+        st.markdown(f"**{i + 1}**")
+    with col_name:
+        st.markdown(f"**{player}**")
+    with col_up:
+        st.button(
+            "↑", key=f"move_up_{player}", disabled=(i == 0),
+            on_click=move_player, args=(i, -1),
+            help=f"Move {player} up one place",
         )
-    _live = list(st.session_state.get("_live") or _default_order)
-    if i < len(_live):
-        _live[i] = sel
-    st.session_state["_live"] = _live
-
+    with col_down:
+        st.button(
+            "↓", key=f"move_down_{player}", disabled=(i == len(chosen) - 1),
+            on_click=move_player, args=(i, 1),
+            help=f"Move {player} down one place",
+        )
     with col_why:
-        # the reason travels with the player, never with the row
-        if sel != auto:
-            st.markdown(
-                f'<div class="sel-why"><b>{sel}</b> — manual override. '
-                f'The app picked <b>{auto}</b> '
-                f'({pick["rule"]}: {pick["why"]}).</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                f'<div class="sel-why">picked by <b>{pick["rule"]}</b> — '
-                f'{pick["why"]}</div>',
-                unsafe_allow_html=True,
-            )
-    chosen.append(sel)
+        st.markdown(
+            f'<div class="sel-why">picked by <b>{reason["rule"]}</b> — '
+            f'{reason["why"]}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 # -------------------------------------------------------------------

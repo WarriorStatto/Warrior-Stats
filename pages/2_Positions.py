@@ -13,7 +13,6 @@ game with the position they batted in.
 
 import os
 import pandas as pd
-import numpy as np
 import streamlit as st
 
 st.set_page_config(
@@ -81,6 +80,18 @@ df = df[df["position"].between(1, 8)]
 
 st.title("🎯 Batting positions")
 
+# Keep the complete dataset for the season picker, then use the filtered
+# dataframe everywhere else on this page.
+ALL_SEASONS = sorted(df["season"].dropna().astype(str).unique(), reverse=True)
+season_choice = st.selectbox(
+    "Season",
+    ["All seasons"] + ALL_SEASONS,
+    index=0,
+    help="Choose one season or leave this on All seasons for the career view.",
+)
+if season_choice != "All seasons":
+    df = df[df["season"].astype(str) == season_choice].copy()
+
 MIN_GAMES = st.slider(
     "Minimum games at a position (for the recommendations)",
     min_value=1, max_value=10, value=3,
@@ -101,7 +112,11 @@ focus = lineup if lineup else SQUAD
 
 st.divider()
 st.markdown("### Position by position")
-st.caption("Every player-game across all seasons, grouped by batting slot.")
+st.caption(
+    "Every player-game across all seasons, grouped by batting slot."
+    if season_choice == "All seasons"
+    else f"Every player-game in {season_choice}, grouped by batting slot."
+)
 
 overall = (df.groupby("position")
              .agg(Games=("score", "count"),
@@ -349,4 +364,10 @@ else:
         )
 
 st.divider()
-st.caption(f"Based on {len(df):,} player-games across {df['season'].nunique()} seasons.")
+if season_choice == "All seasons":
+    st.caption(
+        f"Based on {len(df):,} player-games across "
+        f"{df['season'].nunique()} seasons."
+    )
+else:
+    st.caption(f"Based on {len(df):,} player-games in {season_choice}.")
