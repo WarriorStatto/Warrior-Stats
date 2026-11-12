@@ -261,10 +261,23 @@ squad = sorted(df["player"].dropna().unique())
 # the printable PDF — use the same eight, in the same bowling order.
 FROM_SELECTION = st.session_state.get("lineup") or []
 BOWL_ORDER = st.session_state.get("bowl_order") or {}
+LINEUP_STAMP = st.session_state.get("lineup_stamp") or ""
+
+# The Selection page is the source of truth for WHO is in the side and in
+# WHAT order. A widget cannot carry that by itself: a multiselect with its own
+# `key` takes its value from that key, so a selection made elsewhere is lost
+# the moment the user has touched the widget once. Instead the widget is
+# re-seeded from the selection whenever the selection has changed.
+if FROM_SELECTION and st.session_state.get("_brief_seeded") != LINEUP_STAMP:
+    st.session_state["brief_lineup"] = list(FROM_SELECTION)
+    st.session_state["_brief_seeded"] = LINEUP_STAMP
 
 if FROM_SELECTION:
     st.markdown("##### The selected side")
-    st.caption("Arrived from the Selection page. Change it below if you need to.")
+    st.caption(
+        "Arrived from the Selection page, in this bowling order. "
+        "Change it below if you need to."
+    )
     _order_bits = " · ".join(
         f"**{BOWL_ORDER.get(n, i + 1)}** {n}"
         for i, n in enumerate(FROM_SELECTION)

@@ -529,6 +529,9 @@ st.markdown("### 4. Send to the match briefing")
 if len(chosen) == 8 and len(set(chosen)) == 8:
     st.session_state["lineup"] = list(dict.fromkeys(chosen))
     st.session_state["bowl_order"] = {name: i + 1 for i, name in enumerate(chosen)}
+    # a stamp the briefing page can compare, so it knows the selection
+    # changed after it was last opened
+    st.session_state["lineup_stamp"] = " | ".join(chosen)
     st.success(
         "The eight, in this bowling order, are now on the **Match Briefing** "
         "page — open it and the PDF will use them."
